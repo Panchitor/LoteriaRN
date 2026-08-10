@@ -1,0 +1,170 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Agency {
+  id         String   @id @default(uuid())
+  number     Int      @unique
+  name       String?
+  created_at DateTime @default(now())
+
+  devices    Device[]
+}
+
+model Device {
+  id                   String         @id @default(uuid())
+  agency_id            String
+  agency               Agency         @relation(fields: [agency_id], references: [id])
+  pin_code             String?
+  hw_id                String?
+  status               String         @default("offline")
+  last_seen            DateTime       @default(now())
+  free_space           BigInt?
+  app_version          String?
+  playback_status      String?
+  downloaded_videos    String?
+  created_at           DateTime       @default(now())
+
+  // Group assignment
+  group_id             String?
+  group                DeviceGroup?   @relation(fields: [group_id], references: [id])
+
+  // Screenshot
+  screenshot_requested Boolean        @default(false)
+  last_screenshot      String?
+  screenshot_at        DateTime?
+
+  // Relations
+  logs                 DeviceLog[]
+  playback_stats       PlaybackStat[]
+}
+
+model Video {
+  id               String   @id @default(uuid())
+  filename         String   @unique
+  original_name    String
+  size_bytes       BigInt
+  duration_sec     Int
+  hash_md5         String
+  created_at       DateTime @default(now())
+
+  // New fields
+  order            Int      @default(0)
+  media_type       String   @default("video")   // "video" or "image"
+  display_duration Int      @default(10)         // seconds (for images)
+  thumbnail_path   String?
+}
+
+model Manifest {
+  id         String   @id @default(uuid())
+  version    Int      @unique @default(autoincrement())
+  content    String
+  is_active  Boolean  @default(false)
+  created_at DateTime @default(now())
+}
+
+model SystemConfig {
+  key        String   @id
+  value      String
+  updated_at DateTime @updatedAt
+}
+
+model LiveEvent {
+  id         String   @id @default(uuid())
+  is_active  Boolean  @default(false)
+  url        String?
+  created_at DateTime @default(now())
+}
+
+model User {
+  id            String   @id @default(uuid())
+  username      String   @unique
+  password_hash String
+  role          String   @default("EDITOR")
+  created_at    DateTime @default(now())
+}
+
+// ─── New Models ───────────────────────────────────────────────
+
+model Ticker {
+  id         String   @id @default(uuid())
+  text       String
+  is_active  Boolean  @default(true)
+  speed      Int      @default(50)         // px/sec scroll speed
+  position   String   @default("bottom")   // "top" or "bottom"
+  bg_color   String   @default("#000000CC")
+  text_color String   @default("#FFFFFF")
+  created_at DateTime @default(now())
+}
+
+model DeviceLog {
+  id         String   @id @default(uuid())
+  device_id  String
+  device     Device   @relation(fields: [device_id], references: [id], onDelete: Cascade)
+  level      String   // "info", "warn", "error"
+  message    String
+  created_at DateTime @default(now())
+
+  @@index([device_id, created_at])
+}
+
+model PlaybackStat {
+  id         String    @id @default(uuid())
+  device_id  String
+  device     Device    @relation(fields: [device_id], references: [id], onDelete: Cascade)
+  filename   String
+  started_at DateTime  @default(now())
+  ended_at   DateTime?
+  completed  Boolean   @default(false)
+
+  @@index([device_id, started_at])
+}
+
+model DeviceGroup {
+  id         String     @id @default(uuid())
+  name       String     @unique
+  color      String     @default("#10b981")
+  created_at DateTime   @default(now())
+
+  devices    Device[]
+  schedules  Schedule[]
+}
+
+model Schedule {
+  id         String       @id @default(uuid())
+  name       String
+  video_ids  String       // JSON array of video IDs
+  days       String       // JSON array: ["mon","tue","wed","thu","fri","sat","sun"]
+  start_time String       // "08:00"
+  end_time   String       // "18:00"
+  priority   Int          @default(0)
+  is_active  Boolean      @default(true)
+  group_id   String?
+  group      DeviceGroup? @relation(fields: [group_id], references: [id])
+  created_at DateTime     @default(now())
+}
+
+model Layout {
+  id         String   @id @default(uuid())
+  name       String
+  config     String   // JSON with zone definitions
+  is_default Boolean  @default(false)
+  created_at DateTime @default(now())
+}
+
+model ApiKey {
+  id          String   @id @default(uuid())
+  name        String
+  key         String   @unique
+  is_active   Boolean  @default(true)
+  last_used   DateTime?
+  created_at  DateTime @default(now())
+}
+

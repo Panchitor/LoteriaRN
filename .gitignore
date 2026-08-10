@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Next.js build outputs
+.next/
+**/.next/
+
+# Android build outputs & Gradle
+.gradle/
+**/.gradle/
+build/
+**/build/
+
+# ROM disk images
+*.img
+
+# Media & Sample Video Files
+*.mp4
+storage/videos/
+**/storage/videos/
+
+# Compiled APK binaries
+*.apk
+
+# Environment variables & secrets
+.env
+**/env
+*.local
+
+# Database data directories
+postgres-data/
+**/postgres-data/
+
+# Compressed archives
+*.tar.gz
+
+# System & IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

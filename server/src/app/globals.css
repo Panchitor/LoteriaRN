@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-primary: #00a8e8; /* Lotería Light Blue */
+  --color-primary-hover: #008fcc;
+
+  --color-background: #001a33; /* Dark Blue from Lotería RN */
+  --color-surface: #00284d; /* Slightly lighter blue */
+  --color-surface-hover: #003666; /* Lighter blue */
+  
+  --color-foreground: #f8fafc; /* Slate 50 */
+  --color-muted: #94a3b8; /* Slate 400 */
+  
+  --color-border: #003666;
+  --color-danger: #ef4444; /* Red 500 */
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+/* Glassmorphism utilities */
+.glass {
+  background: rgba(30, 41, 59, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-background);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-hover);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted);
+}

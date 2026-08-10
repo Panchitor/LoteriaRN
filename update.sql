@@ -1,0 +1,2 @@
+INSERT INTO "SystemConfig" (key, value, updated_at) VALUES ('LATEST_APK_VERSION', '1.0.3', NOW()) ON CONFLICT (key) DO UPDATE SET value = '1.0.3', updated_at = NOW();
+INSERT INTO "SystemConfig" (key, value, updated_at) VALUES ('LATEST_APK_URL', 'https://loteriarn.patagonialive.media/downloads/update.apk', NOW()) ON CONFLICT (key) DO UPDATE SET value = 'https://loteriarn.patagonialive.media/downloads/update.apk', updated_at = NOW();
