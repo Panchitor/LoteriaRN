@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
     } catch (_) {
       console.error("Failed to parse telemetry json body");
     }
-    const { token, playbackStatus, freeSpace, appVersion, hardwareId, downloadedVideos } = body;
+    const { token, playbackStatus, freeSpace, appVersion, hardwareId, downloadedVideos, androidVersion, deviceModel, deviceSerial } = body;
 
     if (!token) {
       return NextResponse.json({ error: "Missing token" }, { status: 400 });
@@ -21,18 +21,28 @@ export async function POST(req: NextRequest) {
       videosStr = typeof downloadedVideos === 'string' ? downloadedVideos : JSON.stringify(downloadedVideos);
     }
 
+    const authorizedDevice = await prisma.device.findFirst({
+      where: { id: token, revoked_at: null, installation_id: { not: null } },
+      select: { id: true, screenshot_requested: true, restart_requested: true },
+    });
+    if (!authorizedDevice) {
+      return NextResponse.json({ error: "DEVICE_REVOKED" }, { status: 401 });
+    }
+
     await prisma.device.update({
-      where: { id: token },
+      where: { id: authorizedDevice.id },
       data: {
         last_seen: new Date(),
         playback_status: playbackStatus || "unknown",
         free_space: freeSpace ? Math.floor(freeSpace) : 0, 
         app_version: appVersion || undefined,
         hw_id: hardwareId || undefined,
+        android_version: androidVersion || undefined,
+        device_model: deviceModel || undefined,
+        device_serial: deviceSerial || undefined,
         downloaded_videos: videosStr,
       }
-    }).catch(e => console.error("Telemetry update failed for token", token, e));
-
+    });
     // 2. Fetch the Master Live Status
     let liveEvent = await prisma.liveEvent.findFirst();
     if (!liveEvent) {
@@ -61,7 +71,9 @@ export async function POST(req: NextRequest) {
       emergency: emergencyActive === 'true',
       emergencyMessage,
       primaryApiUrl,
-      secondaryApiUrl
+      secondaryApiUrl,
+      screenshotRequested: authorizedDevice.screenshot_requested,
+      restartRequested: authorizedDevice.restart_requested,
     }, {
       headers: {
         'Access-Control-Allow-Origin': '*',

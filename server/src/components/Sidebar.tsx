@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Tv, FileVideo, Settings, Activity, Users, LogOut, Download, BarChart3, FolderTree, Calendar, AlertTriangle, Type } from "lucide-react";
+import { LayoutDashboard, Tv, FileVideo, Settings, Activity, Users, LogOut, Download, FolderTree, Calendar, AlertTriangle, Type, ShieldAlert } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
 
 const navigation = [
@@ -11,6 +11,7 @@ const navigation = [
   { name: "Contenido", href: "/content", icon: FileVideo, role: "EDITOR" },
   { name: "Marquesina", href: "/ticker", icon: Type, role: "EDITOR" },
   { name: "Monitoreo Red", href: "/monitoring", icon: Activity, role: "EDITOR" },
+  { name: "Alertas", href: "/alerts", icon: ShieldAlert, role: "EDITOR" },
 
   { name: "Transmisión LIVE", href: "/live", icon: Activity, role: "ADMIN" },
   { name: "Emergencia", href: "/emergency", icon: AlertTriangle, role: "ADMIN" },
@@ -33,18 +34,18 @@ export default function Sidebar({ role, username }: { role?: string, username?: 
   });
 
   return (
-    <div className="w-64 border-r border-border bg-background glass flex flex-col h-full sticky top-0">
+    <div className="w-64 border-r border-border bg-background glass flex flex-col h-screen sticky top-0 overflow-hidden">
       <div className="p-6 flex items-center justify-center border-b border-border">
         <div className="flex flex-col items-center">
           <div className="h-16 w-32 mb-2">
-            <img src="https://www.loteriaderionegro.gob.ar/media/temasCompletos/loteriarn/images/logo.png?r=2" alt="Logo Lotería" className="w-full h-full object-contain" />
+            <img src="/logo-loteria-rn.png" alt="Logo Lotería de Río Negro" className="w-full h-full object-contain" />
           </div>
           <h1 className="text-xl font-bold tracking-tight text-white hidden">Lotería RN</h1>
           <p className="text-xs text-muted mb-1 mt-1">Gestor de Agencias</p>
         </div>
       </div>
 
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-1">
         {visibleNav.map((item) => {
           const isActive = pathname === item.href || (pathname.startsWith(item.href) && item.href !== "/");
           return (

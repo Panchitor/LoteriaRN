@@ -12,8 +12,11 @@ export default async function ContentPage() {
 
   const versionHash = videos.reduce((acc, v) => acc + v.created_at.getTime(), videos.length);
   const manifestDisplay = videos.length > 0
-    ? new Date(videos[videos.length - 1].created_at).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
-    : 'Ninguna';
+    ? new Intl.DateTimeFormat('es-AR', {
+        day: '2-digit', month: '2-digit', year: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+      }).format(videos[videos.length - 1].created_at).replace(',', ' ·')
+    : 'Ninguno';
 
   const totalBytes = videos.reduce((acc, curr) => acc + Number(curr.size_bytes), 0);
   const gbUsed = (totalBytes / (1024 * 1024 * 1024)).toFixed(2);
@@ -62,9 +65,9 @@ export default async function ContentPage() {
         </div>
         <div className="glass rounded-xl p-5 flex items-center gap-4 border border-border">
           <div className="bg-blue-500/20 p-3 rounded-lg"><Database className="h-6 w-6 text-blue-500" /></div>
-          <div>
+          <div className="min-w-0">
             <p className="text-sm text-muted">Manifest</p>
-            <p className="text-2xl font-bold text-white">{manifestDisplay}</p>
+            <p className="text-lg font-bold text-white whitespace-nowrap tabular-nums">{manifestDisplay}</p>
           </div>
         </div>
       </div>

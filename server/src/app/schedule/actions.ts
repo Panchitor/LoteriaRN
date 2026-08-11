@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { requireAdmin } from "@/lib/authorization";
 
 export async function createSchedule(data: {
   name: string;
@@ -12,6 +13,7 @@ export async function createSchedule(data: {
   priority: number;
   group_id?: string | null;
 }) {
+  await requireAdmin();
   await prisma.schedule.create({
     data: {
       name: data.name,
@@ -28,6 +30,7 @@ export async function createSchedule(data: {
 }
 
 export async function toggleSchedule(id: string, is_active: boolean) {
+  await requireAdmin();
   await prisma.schedule.update({
     where: { id },
     data: { is_active }
@@ -36,6 +39,7 @@ export async function toggleSchedule(id: string, is_active: boolean) {
 }
 
 export async function deleteSchedule(id: string) {
+  await requireAdmin();
   await prisma.schedule.delete({
     where: { id }
   });

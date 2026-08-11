@@ -2,8 +2,10 @@
 
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
+import { requireAdmin } from "@/lib/authorization"
 
 export async function getEmergencyState() {
+  await requireAdmin();
   const configs = await prisma.systemConfig.findMany({
     where: {
       key: {
@@ -19,6 +21,7 @@ export async function getEmergencyState() {
 }
 
 export async function toggleEmergency(isActive: boolean, message: string) {
+  await requireAdmin();
   await prisma.systemConfig.upsert({
     where: { key: 'EMERGENCY_ACTIVE' },
     update: { value: isActive ? 'true' : 'false' },

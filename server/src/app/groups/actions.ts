@@ -2,8 +2,10 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { requireAdmin } from "@/lib/authorization";
 
 export async function createGroup(name: string, color: string) {
+  await requireAdmin();
   await prisma.deviceGroup.create({
     data: { name, color }
   });
@@ -11,6 +13,7 @@ export async function createGroup(name: string, color: string) {
 }
 
 export async function deleteGroup(id: string) {
+  await requireAdmin();
   await prisma.deviceGroup.delete({
     where: { id }
   });
@@ -18,6 +21,7 @@ export async function deleteGroup(id: string) {
 }
 
 export async function assignDeviceToGroup(deviceId: string, groupId: string | null) {
+  await requireAdmin();
   await prisma.device.update({
     where: { id: deviceId },
     data: { group_id: groupId }

@@ -1,4 +1,4 @@
-export SSHPASS='Canal&10&RioNegro'
+: "${SSHPASS:?Set SSHPASS in the environment}"
 sshpass -e ssh -o StrictHostKeyChecking=no -p 5753 root@149.50.139.29 << 'EOF'
 cat << 'NGINX_CONF' > /etc/nginx/sites-available/loteria
 server {

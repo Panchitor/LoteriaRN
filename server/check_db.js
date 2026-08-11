@@ -2,7 +2,7 @@ const { Client } = require('pg');
 
 async function check() {
   const client = new Client({
-    connectionString: 'postgresql://postgres:postgres@localhost:5433/loteria?schema=public'
+    connectionString: process.env.DATABASE_URL
   });
   try {
     await client.connect();

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image, Animated, NativeModules } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image, Animated, NativeModules, AppState } from 'react-native';
 import { Video, ResizeMode } from 'expo-av';
 
 import Constants from 'expo-constants';
@@ -78,11 +78,16 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
   const [networkState, setNetworkState] = useState<Network.NetworkState | null>(null);
   
   const [liveRetryKey, setLiveRetryKey] = useState(0);
+  const [offlineRetryKey, setOfflineRetryKey] = useState(0);
   const [liveHasError, setLiveHasError] = useState(false);
   const [isLiveReady, setIsLiveReady] = useState(false);
   
   const lastAttemptedUpdateRef = useRef<string | null>(null);
   const missedLiveCountRef = useRef<number>(0);
+  const remoteCommandBusyRef = useRef(false);
+  const updateInProgressRef = useRef(false);
+  const updateProgressRef = useRef(0);
+  const deviceInfoRef = useRef<{ androidVersion?: string; deviceModel?: string; deviceSerial?: string }>({});
 
   const loopVideoRef = useRef<Video>(null);
   const liveVideoRef = useRef<Video>(null);
@@ -93,11 +98,28 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
   
   const liveLastPositionRef = useRef<number>(0);
   const liveLastPositionTimeRef = useRef<number>(Date.now());
+  const liveStatusRef = useRef<LiveStatus>(liveStatus);
+  const emergencyRef = useRef(emergency);
   
   const currentAppVersion = Constants.expoConfig?.version || '1.0.0';
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const liveFadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    liveStatusRef.current = liveStatus;
+  }, [liveStatus]);
+
+  useEffect(() => {
+    emergencyRef.current = emergency;
+  }, [emergency]);
+
+  useEffect(() => {
+    if (!SilentInstall?.getDeviceInfo) return;
+    SilentInstall.getDeviceInfo()
+      .then((info: any) => { deviceInfoRef.current = info || {}; })
+      .catch((error: any) => sendRemoteLog('warn', `No se pudo leer identidad de hardware: ${error?.message}`));
+  }, []);
 
   const fadeIn = () => {
     Animated.timing(fadeAnim, {
@@ -184,7 +206,10 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
   }, []);
 
   const downloadAndInstallUpdate = async (apkUrl: string, newVersion: string) => {
-    if (isUpdating || lastAttemptedUpdateRef.current === newVersion) return;
+    if (updateInProgressRef.current || lastAttemptedUpdateRef.current === newVersion) return;
+    updateInProgressRef.current = true;
+    lastAttemptedUpdateRef.current = newVersion;
+    updateProgressRef.current = 0;
     
     try {
       setIsUpdating(true);
@@ -205,8 +230,10 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
         fileUri,
         {},
         (downloadProgress) => {
-          const progress = downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite;
-          const percentage = (progress * 100).toFixed(0);
+          const expected = Math.max(downloadProgress.totalBytesExpectedToWrite, 1);
+          const progress = Math.min(100, Math.round((downloadProgress.totalBytesWritten / expected) * 100));
+          updateProgressRef.current = Math.max(updateProgressRef.current, progress);
+          const percentage = updateProgressRef.current;
           setUpdateStatusText(`Se encontró una nueva actualización (v${newVersion}). Descargando paquete: ${percentage}%`);
         }
       );
@@ -214,8 +241,6 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
       const downloadResult = await downloadResumable.downloadAsync();
       if (!downloadResult) throw new Error("Fallo la descarga de la APK");
       const { uri } = downloadResult;
-      lastAttemptedUpdateRef.current = newVersion;
-      
       const cleanPath = uri.replace('file://', '');
       setUpdateStatusText(`Descarga completada (v${newVersion}). Aplicando actualización en segundo plano (su / pm)...`);
 
@@ -223,23 +248,31 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
         if (SilentInstall && SilentInstall.installApk) {
           const res = await SilentInstall.installApk(cleanPath);
           sendRemoteLog('info', `Instalación silenciosa ejecutada con éxito (${res})`);
-          setUpdateStatusText(`Actualización v${newVersion} instalada correctamente en segundo plano.`);
+          setUpdateStatusText(`Instalando actualización v${newVersion}. No apagar el equipo; la aplicación se reiniciará automáticamente.`);
         } else {
           throw new Error("Módulo de instalación silenciosa no registrado");
         }
       } catch (silentErr: any) {
         sendRemoteLog('warn', `Instalación silenciosa en reintento: ${silentErr?.message}`);
         setUpdateStatusText(`DETALLE ERROR (v${newVersion}): ${silentErr?.message || silentErr}`);
+        setTimeout(() => {
+          updateInProgressRef.current = false;
+          lastAttemptedUpdateRef.current = null;
+          setIsUpdating(false);
+        }, 10000);
       }
 
+      // Salvaguarda por si el instalador del firmware no reinicia el proceso.
       setTimeout(() => {
+        updateInProgressRef.current = false;
         setIsUpdating(false);
-        setUpdateStatusText('');
-      }, 8000);
+      }, 120000);
       
     } catch (e: any) {
       sendRemoteLog('error', `Error en instalación OTA: ${e?.message}`);
       setUpdateStatusText(`Error al actualizar: ${e?.message || 'Error desconocido'}`);
+      updateInProgressRef.current = false;
+      lastAttemptedUpdateRef.current = null;
       setTimeout(() => {
         setIsUpdating(false);
       }, 5000);
@@ -322,7 +355,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
             return;
         }
 
-        let targetUrl = liveStatus.url || 'https://loteriarn.b-cdn.net/Forquera2/video.m3u8';
+        let targetUrl = liveStatusRef.current.url || 'https://loteriarn.b-cdn.net/Forquera2/video.m3u8';
 
         // 1. Telemetry and central control from VPS (if reachable)
         try {
@@ -337,13 +370,20 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
               token: token,
-              playbackStatus: emergency.active ? 'emergency' : liveStatus.live ? 'live' : 'offline',
+              playbackStatus: emergencyRef.current.active ? 'emergency' : liveStatusRef.current.live ? 'live' : 'offline',
               freeSpace: freeDiskSpace,
               appVersion: currentAppVersion,
               hardwareId: Constants.installationId || token,
+              androidVersion: deviceInfoRef.current.androidVersion,
+              deviceModel: deviceInfoRef.current.deviceModel,
+              deviceSerial: deviceInfoRef.current.deviceSerial,
               downloadedVideos: currentDownloadedFiles
             })
           });
+          if (resLive.status === 401) {
+            await onLogout();
+            return;
+          }
           const dataLive = await resLive.json();
 
           if (dataLive?.primaryApiUrl || dataLive?.secondaryApiUrl) {
@@ -366,6 +406,46 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
               active: dataLive.emergency,
               message: dataLive.emergencyMessage || ''
             });
+          }
+
+          if (dataLive.restartRequested && !remoteCommandBusyRef.current) {
+            remoteCommandBusyRef.current = true;
+            try {
+              await fetchWithFailover('/api/device-control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token, action: 'restart_ack' })
+              });
+              sendRemoteLog('info', 'Orden remota: reiniciando aplicacion');
+              setTimeout(() => SilentInstall?.restartApp?.(), 750);
+              return;
+            } catch (commandError: any) {
+              remoteCommandBusyRef.current = false;
+              sendRemoteLog('error', `Fallo al aceptar reinicio remoto: ${commandError?.message}`);
+            }
+          } else if (dataLive.screenshotRequested && !remoteCommandBusyRef.current) {
+            remoteCommandBusyRef.current = true;
+            try {
+              if (!SilentInstall?.captureScreen) throw new Error('Captura nativa no disponible');
+              const imageBase64 = await SilentInstall.captureScreen();
+              await fetchWithFailover('/api/device-control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token, action: 'screenshot', imageBase64 })
+              }, 15000);
+              sendRemoteLog('info', 'Captura remota enviada correctamente');
+            } catch (commandError: any) {
+              try {
+                await fetchWithFailover('/api/device-control', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ token, action: 'screenshot', error: commandError?.message || 'Error desconocido' })
+                });
+              } catch (_) {}
+              sendRemoteLog('error', `Fallo en captura remota: ${commandError?.message}`);
+            } finally {
+              remoteCommandBusyRef.current = false;
+            }
           }
 
           if (dataLive.latestApkVersion && isVersionNewer(dataLive.latestApkVersion, currentAppVersion)) {
@@ -400,14 +480,16 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
         if (isMounted) {
           if (isStreamOnline) {
             missedLiveCountRef.current = 0;
-            if (!liveStatus.live || liveStatus.url !== targetUrl) {
+            if (!liveStatusRef.current.live || liveStatusRef.current.url !== targetUrl) {
               setLiveHasError(false);
+              liveStatusRef.current = { live: true, url: targetUrl };
               setLiveStatus({ live: true, url: targetUrl });
             }
           } else {
             missedLiveCountRef.current = 0;
             setLiveHasError(false);
-            if (liveStatus.live || liveStatus.url !== targetUrl) {
+            if (liveStatusRef.current.live || liveStatusRef.current.url !== targetUrl) {
+              liveStatusRef.current = { live: false, url: targetUrl };
               setLiveStatus({ live: false, url: targetUrl });
             }
           }
@@ -474,8 +556,14 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
 
   const onOfflineVideoEnd = async (status: any) => {
     if (status.isLoaded) {
+      if (status.isPlaying && Math.abs(status.positionMillis - lastPositionRef.current) >= 250) {
+        lastPositionRef.current = status.positionMillis;
+        lastPositionTimeRef.current = Date.now();
+      }
       // Normal end logic
       if (status.didJustFinish) {
+        lastPositionRef.current = 0;
+        lastPositionTimeRef.current = Date.now();
         if (currentItem) {
           sendPlaybackStat(currentItem.filename, 'end', true);
         }
@@ -507,7 +595,8 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
             setLiveRetryKey(prev => prev + 1);
             liveLastPositionTimeRef.current = Date.now();
         }
-      } else if (status.isPlaying) {
+      } else if (status.isPlaying && Math.abs(status.positionMillis - liveLastPositionRef.current) >= 250) {
+        liveLastPositionRef.current = status.positionMillis;
         liveLastPositionTimeRef.current = Date.now();
       }
     } else if (status.error) {
@@ -520,6 +609,56 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
   const currentVideoFilename = currentItem?.filename;
   const localUri = currentVideoFilename ? localFiles[currentVideoFilename] : null;
   const offlineSrc = localUri ? { uri: localUri } : null;
+
+  useEffect(() => {
+    lastPositionRef.current = 0;
+    lastPositionTimeRef.current = Date.now();
+    liveLastPositionRef.current = 0;
+    liveLastPositionTimeRef.current = Date.now();
+  }, [currentVideoFilename, liveStatus.live, liveStatus.url]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (isUpdating || emergency.active) return;
+
+      const now = Date.now();
+      const liveIsActive = liveStatus.live && liveStatus.url !== '' && !liveHasError;
+      if (liveIsActive && now - liveLastPositionTimeRef.current > 25000) {
+        sendRemoteLog('warn', 'Watchdog: transmision en vivo congelada. Reiniciando reproductor.');
+        liveLastPositionRef.current = 0;
+        liveLastPositionTimeRef.current = now;
+        setLiveRetryKey(prev => prev + 1);
+        return;
+      }
+
+      const localIsActive = !!localUri && !isImageItem && (!liveIsActive || !isLiveReady);
+      if (localIsActive && now - lastPositionTimeRef.current > 20000) {
+        sendRemoteLog('warn', `Watchdog: video local congelado (${currentVideoFilename}). Reiniciando reproductor.`);
+        lastPositionRef.current = 0;
+        lastPositionTimeRef.current = now;
+        setOfflineRetryKey(prev => prev + 1);
+      }
+    }, 5000);
+
+    return () => clearInterval(timer);
+  }, [isUpdating, emergency.active, liveStatus.live, liveStatus.url, liveHasError, isLiveReady, localUri, isImageItem, currentVideoFilename]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextState => {
+      if (nextState !== 'active') return;
+
+      const now = Date.now();
+      lastPositionTimeRef.current = now;
+      liveLastPositionTimeRef.current = now;
+      if (liveStatus.live && liveStatus.url !== '' && !liveHasError) {
+        setLiveRetryKey(prev => prev + 1);
+      } else if (!isImageItem && localUri) {
+        setOfflineRetryKey(prev => prev + 1);
+      }
+    });
+
+    return () => subscription.remove();
+  }, [liveStatus.live, liveStatus.url, liveHasError, isImageItem, localUri]);
 
   if (isUpdating) {
     return (
@@ -570,7 +709,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
            ) : (
              <Video
                ref={loopVideoRef}
-               key={currentVideoFilename}
+               key={`${currentVideoFilename}_${offlineRetryKey}`}
                source={offlineSrc}
                style={StyleSheet.absoluteFill}
                useNativeControls={false}

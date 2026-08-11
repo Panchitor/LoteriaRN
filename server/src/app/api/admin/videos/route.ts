@@ -58,7 +58,11 @@ export async function POST(req: NextRequest) {
     }
 
     const media_type = isImage ? "image" : "video";
-    const display_duration = isImage ? parseInt(displayDurationStr || "10") : 0;
+    const requestedDuration = parseInt(displayDurationStr || "10", 10);
+    if (isImage && (!Number.isInteger(requestedDuration) || requestedDuration < 3 || requestedDuration > 3600)) {
+      return NextResponse.json({ error: "La duración debe estar entre 3 y 3600 segundos" }, { status: 400 });
+    }
+    const display_duration = isImage ? requestedDuration : 0;
     const duration_sec = isImage ? display_duration : 60; // Mock video duration
 
     // Get the current max order value

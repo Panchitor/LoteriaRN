@@ -52,6 +52,7 @@ export async function fetchWithFailover(endpoint: string, options: RequestInit =
     if (response.ok) {
       return response;
     }
+    if (response.status === 401 || response.status === 403) return response;
   } catch (primaryErr) {
     console.warn(`[Failover] Falló servidor primario (${primary}${cleanEndpoint}). Intentando secundario...`);
   }
@@ -70,6 +71,7 @@ export async function fetchWithFailover(endpoint: string, options: RequestInit =
       console.log(`[Failover] Respondió con éxito el servidor secundario (${secondary}${cleanEndpoint}).`);
       return response;
     }
+    if (response.status === 401 || response.status === 403) return response;
   } catch (secondaryErr) {
     console.error(`[Failover] Ambos servidores (Primario y Secundario) no responden.`);
   }

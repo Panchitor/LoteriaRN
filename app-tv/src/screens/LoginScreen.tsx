@@ -1,15 +1,28 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator, Platform, Image } from 'react-native';
 import * as IntentLauncher from 'expo-intent-launcher';
+import * as SecureStore from 'expo-secure-store';
 import { fetchWithFailover, saveServerUrls } from '../services/apiClient';
 
 export default function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
-  const [agencyNumber, setAgencyNumber] = useState('');
+  const [activationCode, setActivationCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [installationId, setInstallationId] = useState('');
   
   // 0 = Wifi Button, 1 = TextInput, 2 = Submit Button
   const [focusedIndex, setFocusedIndex] = useState<number>(1);
+
+  useEffect(() => {
+    const loadInstallationId = async () => {
+      const stored = await SecureStore.getItemAsync('installation_id');
+      if (stored) return setInstallationId(stored);
+      const created = `tv-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+      await SecureStore.setItemAsync('installation_id', created);
+      setInstallationId(created);
+    };
+    loadInstallationId().catch(() => setInstallationId(`tv-${Date.now()}`));
+  }, []);
 
   const handleOpenWifi = async () => {
     if (Platform.OS === 'android') {
@@ -24,8 +37,8 @@ export default function LoginScreen({ onLogin }: { onLogin: (token: string) => v
   };
 
   const handleLogin = async () => {
-    if (!agencyNumber) {
-      setError('Ingrese el número de agencia');
+    if (!activationCode) {
+      setError('Ingrese el código de vinculación');
       return;
     }
 
@@ -36,7 +49,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (token: string) => v
       const res = await fetchWithFailover('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agencyNumber })
+        body: JSON.stringify({ activationCode, installationId })
       });
 
       const data = await res.json();
@@ -75,8 +88,10 @@ export default function LoginScreen({ onLogin }: { onLogin: (token: string) => v
         {/* 1. BOTON CONFIGURAR WI-FI */}
         <Pressable 
           focusable={true}
+          hasTVPreferredFocus={true}
           onFocus={() => setFocusedIndex(0)}
           onBlur={() => setFocusedIndex(-1)}
+          onPressIn={() => setFocusedIndex(0)}
           style={() => [
             styles.wifiButton, 
             isWifiFocused && styles.focusedWifiButton
@@ -85,24 +100,25 @@ export default function LoginScreen({ onLogin }: { onLogin: (token: string) => v
         >
           {() => (
             <Text style={[styles.wifiButtonText, isWifiFocused && styles.focusedWifiText]}>
-              {isWifiFocused ? '👉 📶 CONFIGURAR RED WI-FI 👈' : '📶 CONFIGURAR RED WI-FI'}
+              📶 CONFIGURAR RED WI-FI {isWifiFocused ? '  ● SELECCIONADO' : ''}
             </Text>
           )}
         </Pressable>
 
-        {/* 2. CAMPO NUMERO DE AGENCIA */}
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Número de Agencia Asociada:</Text>
+        {/* 2. CÓDIGO DE VINCULACIÓN */}
+        <View style={[styles.inputContainer, isInputFocused && styles.focusedInputContainer]}>
+          <Text style={[styles.label, isInputFocused && styles.focusedLabel]}>Código de vinculación {isInputFocused ? '· SELECCIONADO' : ''}</Text>
           <TextInput
             style={[
               styles.input,
               isInputFocused && styles.focusedInput
             ]}
-            value={agencyNumber}
-            onChangeText={setAgencyNumber}
+            value={activationCode}
+            onChangeText={value => setActivationCode(value.replace(/\D/g, '').slice(0, 8))}
             onFocus={() => setFocusedIndex(1)}
+            onBlur={() => setFocusedIndex(-1)}
             keyboardType="numeric"
-            placeholder="Ej: 45"
+            placeholder="Ej: 48392175"
             placeholderTextColor="#64748b"
             autoFocus
           />
@@ -115,6 +131,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (token: string) => v
           focusable={true}
           onFocus={() => setFocusedIndex(2)}
           onBlur={() => setFocusedIndex(-1)}
+          onPressIn={() => setFocusedIndex(2)}
           style={() => [
             styles.button,
             isSubmitFocused && styles.focusedSubmitButton
@@ -127,7 +144,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (token: string) => v
               <ActivityIndicator color="#ffffff" />
             ) : (
               <Text style={[styles.buttonText, isSubmitFocused && styles.focusedSubmitText]}>
-                {isSubmitFocused ? '👉 VINCULAR PANTALLA 👈' : 'VINCULAR PANTALLA'}
+                VINCULAR DISPOSITIVO {isSubmitFocused ? '  ● SELECCIONADO' : ''}
               </Text>
             )
           )}
@@ -193,10 +210,14 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   focusedWifiButton: {
-    backgroundColor: '#fbbf24', // NEON GOLD YELLOW
+    backgroundColor: '#facc15',
     borderColor: '#ffffff',
     borderWidth: 6,
     transform: [{ scale: 1.06 }],
+    elevation: 18,
+    shadowColor: '#facc15',
+    shadowOpacity: 1,
+    shadowRadius: 18,
   },
   focusedWifiText: {
     color: '#000000', // BLACK TEXT FOR MAX CONTRAST
@@ -206,6 +227,19 @@ const styles = StyleSheet.create({
   inputContainer: {
     width: '100%',
     marginBottom: 20,
+    padding: 8,
+    borderWidth: 5,
+    borderColor: 'transparent',
+    borderRadius: 15,
+  },
+  focusedInputContainer: {
+    borderColor: '#facc15',
+    backgroundColor: '#422006',
+    transform: [{ scale: 1.04 }],
+    elevation: 18,
+    shadowColor: '#facc15',
+    shadowOpacity: 1,
+    shadowRadius: 18,
   },
   label: {
     color: '#94a3b8',
@@ -224,10 +258,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   focusedInput: {
-    borderColor: '#38bdf8', // BRIGHT CYAN
+    borderColor: '#ffffff',
     borderWidth: 6,
-    backgroundColor: '#1e293b',
+    backgroundColor: '#0f172a',
     color: '#ffffff',
+  },
+  focusedLabel: {
+    color: '#facc15',
+    fontWeight: '900',
   },
   errorText: {
     color: '#ef4444',
@@ -255,10 +293,14 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   focusedSubmitButton: {
-    backgroundColor: '#fbbf24', // NEON GOLD YELLOW
+    backgroundColor: '#facc15',
     borderColor: '#ffffff',
     borderWidth: 6,
     transform: [{ scale: 1.06 }],
+    elevation: 18,
+    shadowColor: '#facc15',
+    shadowOpacity: 1,
+    shadowRadius: 18,
   },
   focusedSubmitText: {
     color: '#000000', // BLACK TEXT FOR MAX CONTRAST

@@ -2,8 +2,10 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { requireAdmin } from "@/lib/authorization";
 
 export async function saveConfigs(configs: { key: string; value: string }[]) {
+  await requireAdmin();
   try {
     for (const config of configs) {
       if (config.key.trim() === '') continue;
@@ -23,6 +25,7 @@ export async function saveConfigs(configs: { key: string; value: string }[]) {
 }
 
 export async function deleteConfig(key: string) {
+  await requireAdmin();
   try {
     await prisma.systemConfig.delete({
       where: { key }

@@ -2,8 +2,10 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { requireSession } from "@/lib/authorization";
 
 export async function createTicker(formData: FormData) {
+  await requireSession();
   const text = formData.get("text") as string;
   const speed = parseInt(formData.get("speed") as string) || 50;
   const position = formData.get("position") as string || "bottom";
@@ -29,6 +31,7 @@ export async function createTicker(formData: FormData) {
 }
 
 export async function toggleTicker(id: string, is_active: boolean) {
+  await requireSession();
   await prisma.ticker.update({
     where: { id },
     data: { is_active },
@@ -38,6 +41,7 @@ export async function toggleTicker(id: string, is_active: boolean) {
 }
 
 export async function deleteTicker(id: string) {
+  await requireSession();
   await prisma.ticker.delete({
     where: { id },
   });

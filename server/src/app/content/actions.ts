@@ -4,10 +4,12 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import fs from "fs";
 import path from "path";
+import { requireSession } from "@/lib/authorization";
 
 const STORAGE_PATH = process.env.STORAGE_PATH || "C:/LotAgencia/storage/videos";
 
 export async function deleteVideo(id: string) {
+  await requireSession();
   try {
     const video = await prisma.video.findUnique({ where: { id } });
     if (!video) return { error: "Video no encontrado" };
@@ -34,6 +36,7 @@ export async function deleteVideo(id: string) {
 }
 
 export async function reorderVideos(orderedIds: string[]) {
+  await requireSession();
   try {
     // Update each video's order field based on position in array
     const updates = orderedIds.map((id, index) =>
@@ -50,3 +53,18 @@ export async function reorderVideos(orderedIds: string[]) {
   }
 }
 
+export async function updateImageDuration(id: string, duration: number) {
+  await requireSession();
+  if (!Number.isInteger(duration) || duration < 3 || duration > 3600) {
+    return { error: "La duración debe estar entre 3 y 3600 segundos" };
+  }
+  const image = await prisma.video.findUnique({ where: { id } });
+  if (!image || image.media_type !== "image") return { error: "Imagen no encontrada" };
+
+  await prisma.video.update({
+    where: { id },
+    data: { display_duration: duration, duration_sec: duration },
+  });
+  revalidatePath("/content");
+  return { success: true };
+}

@@ -3,6 +3,7 @@ import { Activity, PowerOff, RefreshCw, CheckCircle } from "lucide-react";
 import { revalidatePath } from "next/cache";
 import Link from 'next/link';
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { getDeviceOperationalState, operationalStateLabel } from "@/lib/deviceStatus";
 
 export const dynamic = "force-dynamic";
 
@@ -17,14 +18,15 @@ export default async function MonitoringPage() {
   // Calculate analytics
   const processedDevices = devices.map(device => {
     const diffSec = (now - new Date(device.last_seen).getTime()) / 1000;
-    // If we haven't seen a ping in 30 seconds, consider it offline/dead
-    const isOnline = diffSec < 30;
-    return { ...device, isOnline, diffSec };
+    const operationalState = getDeviceOperationalState(device, now);
+    return { ...device, operationalState, isOnline: operationalState === "online", diffSec };
   });
 
   const onlineCount = processedDevices.filter(d => d.isOnline).length;
-  const offlineCount = processedDevices.filter(d => !d.isOnline).length;
-  const totalCount = processedDevices.length;
+  const delayedCount = processedDevices.filter(d => d.operationalState === "delayed").length;
+  const offlineCount = processedDevices.filter(d => d.operationalState === "offline").length;
+  const inactiveCount = processedDevices.filter(d => d.operationalState === "inactive").length;
+  const totalCount = processedDevices.filter(d => d.operationalState !== "inactive").length;
 
   return (
     <div className="p-8 pb-20 sm:p-10 font-[family-name:var(--font-geist-sans)] max-w-[1600px] mx-auto w-full">
@@ -50,7 +52,7 @@ export default async function MonitoringPage() {
       </div>
 
       {/* Top Main Grafana-style Widgets */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mb-8">
         <div className="bg-[#181b1f] border-t-2 border-t-blue-500 p-6 shadow-xl relative overflow-hidden flex flex-col justify-between h-[150px]">
           <div className="text-xs font-bold text-blue-400 mb-1 uppercase tracking-wider">Total Agencias</div>
           <div className="text-7xl font-black text-white">{totalCount}</div>
@@ -69,6 +71,14 @@ export default async function MonitoringPage() {
           </div>
           <div className="text-7xl font-black text-[#ff6666]">{offlineCount}</div>
         </div>
+        <div className="bg-amber-950/40 border-t-2 border-t-amber-400 p-6 shadow-xl relative overflow-hidden flex flex-col justify-between h-[150px]">
+          <div className="text-xs font-bold text-amber-300 uppercase tracking-wider">Demorados</div>
+          <div className="text-7xl font-black text-amber-300">{delayedCount}</div>
+        </div>
+        <div className="bg-slate-900 border-t-2 border-t-slate-600 p-6 shadow-xl relative overflow-hidden flex flex-col justify-between h-[150px]">
+          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Inactivos</div>
+          <div className="text-7xl font-black text-slate-500">{inactiveCount}</div>
+        </div>
       </div>
 
       <div className="mb-4">
@@ -81,24 +91,27 @@ export default async function MonitoringPage() {
           <div className="col-span-full py-12 text-center text-muted">No hay agencias conectadas.</div>
         ) : (
           processedDevices.map(device => {
-            const isOnline = device.isOnline;
             const diff = Math.floor(device.diffSec);
+            const stateStyles = {
+              online: "bg-[#163620] border-l-[#32d74b] text-[#d4f8da]",
+              delayed: "bg-amber-950/50 border-l-amber-400 text-amber-100",
+              offline: "bg-[#3d1616] border-l-[#ff453a] text-[#fedada]",
+              inactive: "bg-slate-900 border-l-slate-600 text-slate-500",
+              unlinked: "bg-slate-900 border-l-slate-400 text-slate-300",
+            }[device.operationalState];
+            const stateText = { online: "text-[#32d74b]", delayed: "text-amber-300", offline: "text-[#ff453a]", inactive: "text-slate-500", unlinked: "text-slate-300" }[device.operationalState];
             
             return (
               <Link 
                 href={`/monitoring/${device.id}`}
                 key={device.id}
-                className={`group flex flex-col justify-between p-4 h-[110px] cursor-pointer hover:brightness-125 transition-all ${
-                  isOnline 
-                    ? "bg-[#163620] border-l-4 border-l-[#32d74b] shadow-[0_4px_12px_rgba(50,215,75,0.05)] text-[#d4f8da]" 
-                    : "bg-[#3d1616] border-l-4 border-l-[#ff453a] shadow-[0_4px_12px_rgba(255,69,58,0.1)] text-[#fedada]"
-                }`}
+                className={`group flex flex-col justify-between border-l-4 p-4 h-[110px] cursor-pointer hover:brightness-125 transition-all ${stateStyles}`}
               >
                 <div className="flex justify-between items-start w-full">
                    <div className="text-xl font-black tracking-tight">
                      AG {device.agency.number}
                    </div>
-                   {isOnline ? (
+                   {device.operationalState === "online" ? (
                      <div className="w-2 h-2 rounded-full bg-[#32d74b] animate-pulse shadow-[0_0_5px_rgba(50,215,75,0.8)]"></div>
                    ) : (
                      <div className="w-2 h-2 rounded-full bg-[#ff453a] shadow-[0_0_5px_rgba(255,69,58,0.8)]"></div>
@@ -106,8 +119,8 @@ export default async function MonitoringPage() {
                 </div>
                 
                 <div className="mt-auto flex flex-col gap-0.5">
-                  <div className={`text-[10px] font-bold uppercase tracking-widest ${isOnline ? 'text-[#32d74b]' : 'text-[#ff453a]'}`}>
-                    {isOnline ? "Online" : "Offline"}
+                  <div className={`text-[10px] font-bold uppercase tracking-widest ${stateText}`}>
+                    {operationalStateLabel(device.operationalState)}
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="text-[10px] font-mono opacity-60">
