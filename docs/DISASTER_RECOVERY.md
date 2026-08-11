@@ -49,3 +49,7 @@ La restauración es destructiva únicamente para la base `loteria` y las carpeta
 ## Prueba periódica
 
 Una vez por mes crear una copia y restaurarla en una base temporal. No se considera válido un backup que nunca fue restaurado.
+
+## Copia automática en la VPS
+
+`ops/backup-on-server.sh` crea cada día una copia liviana de base, código, `.env`, medios, Nginx y PM2, valida sus hashes y conserva 14 días. Las APK históricas se mantienen en el backup completo manual para no llenar el disco de la VPS.
