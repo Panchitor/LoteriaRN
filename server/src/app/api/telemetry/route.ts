@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
 
     const authorizedDevice = await prisma.device.findFirst({
       where: { id: token, revoked_at: null, installation_id: { not: null } },
-      select: { id: true, screenshot_requested: true, restart_requested: true },
+      select: { id: true, screenshot_requested: true, restart_requested: true, update_channel: true },
     });
     if (!authorizedDevice) {
       return NextResponse.json({ error: "DEVICE_REVOKED" }, { status: 401 });
@@ -51,10 +51,15 @@ export async function POST(req: NextRequest) {
 
     // 3. Fetch Latest APK Version, Emergency, and Failover Server URLs from SystemConfig
     const configs = await prisma.systemConfig.findMany({
-      where: { key: { in: ['LATEST_APK_VERSION', 'LATEST_APK_URL', 'FLUSSONIC_POLL_INTERVAL', 'EMERGENCY_ACTIVE', 'EMERGENCY_MESSAGE', 'PRIMARY_API_URL', 'SECONDARY_API_URL'] } }
+      where: { key: { in: ['LATEST_APK_VERSION', 'LATEST_APK_URL', 'PILOT_APK_VERSION', 'PILOT_APK_URL', 'FLUSSONIC_POLL_INTERVAL', 'EMERGENCY_ACTIVE', 'EMERGENCY_MESSAGE', 'PRIMARY_API_URL', 'SECONDARY_API_URL'] } }
     });
-    const latestApkVersion = configs.find(c => c.key === 'LATEST_APK_VERSION')?.value || null;
-    const latestApkUrl = configs.find(c => c.key === 'LATEST_APK_URL')?.value || null;
+    const stableApkVersion = configs.find(c => c.key === 'LATEST_APK_VERSION')?.value || null;
+    const stableApkUrl = configs.find(c => c.key === 'LATEST_APK_URL')?.value || null;
+    const pilotApkVersion = configs.find(c => c.key === 'PILOT_APK_VERSION')?.value || null;
+    const pilotApkUrl = configs.find(c => c.key === 'PILOT_APK_URL')?.value || null;
+    const usePilot = authorizedDevice.update_channel === 'PILOT' && Boolean(pilotApkVersion && pilotApkUrl);
+    const latestApkVersion = usePilot ? pilotApkVersion : stableApkVersion;
+    const latestApkUrl = usePilot ? pilotApkUrl : stableApkUrl;
     const pollInterval = parseInt(configs.find(c => c.key === 'FLUSSONIC_POLL_INTERVAL')?.value || '10', 10);
     const emergencyActive = configs.find(c => c.key === 'EMERGENCY_ACTIVE')?.value || 'false';
     const emergencyMessage = configs.find(c => c.key === 'EMERGENCY_MESSAGE')?.value || '';
@@ -67,6 +72,7 @@ export async function POST(req: NextRequest) {
       timestamp: Date.now(),
       latestApkVersion,
       latestApkUrl,
+      updateChannel: usePilot ? 'PILOT' : 'STABLE',
       pollInterval,
       emergency: emergencyActive === 'true',
       emergencyMessage,
