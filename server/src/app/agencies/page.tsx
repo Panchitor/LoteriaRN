@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
-import { AgencyForm, DeleteButton } from "./AgencyForm";
+import { AgencyForm, DeleteButton, DeviceActions } from "./AgencyForm";
 import { Tv, Activity } from "lucide-react";
+import { getDeviceOperationalState, operationalStateLabel } from "@/lib/deviceStatus";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +11,7 @@ export default async function AgenciesPage() {
     include: {
       devices: true,
     },
-    orderBy: { number: "asc" },
+    orderBy: [{ number: "asc" }, { subagency_number: "asc" }],
   });
 
   return (
@@ -27,7 +29,8 @@ export default async function AgenciesPage() {
           <thead>
             <tr className="bg-surface-hover/50 border-b border-border">
               <th className="px-6 py-4 text-sm font-semibold text-white">N° Sucursal</th>
-              <th className="px-6 py-4 text-sm font-semibold text-white">Detalle / Zona</th>
+              <th className="px-6 py-4 text-sm font-semibold text-white">Subagencia</th>
+              <th className="px-6 py-4 text-sm font-semibold text-white">Ciudad</th>
               <th className="px-6 py-4 text-sm font-semibold text-white">Pantallas TV</th>
               <th className="px-6 py-4 text-sm font-semibold text-white">Estado RED</th>
               <th className="px-6 py-4 text-sm font-semibold text-white text-right">Acciones</th>
@@ -36,7 +39,7 @@ export default async function AgenciesPage() {
           <tbody className="divide-y divide-border">
             {agencies.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-6 py-12 text-center text-muted">
+                <td colSpan={6} className="px-6 py-12 text-center text-muted">
                   No hay agencias registradas aún.
                 </td>
               </tr>
@@ -47,12 +50,25 @@ export default async function AgenciesPage() {
                     Agencia {agency.number.toString().padStart(2, "0")}
                   </td>
                   <td className="px-6 py-4 text-muted">
-                    {agency.name || <span className="italic opacity-50">Sin especificar</span>}
+                    {agency.subagency_number ? `Subagencia ${agency.subagency_number}` : "Sin subagencia"}
+                  </td>
+                  <td className="px-6 py-4 text-muted">
+                    {agency.city || <span className="italic opacity-50">Sin especificar</span>}
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <Tv className="h-4 w-4 text-primary" />
-                      <span className="font-medium text-white">{agency.devices.length}</span>
+                      <div className="font-medium text-white">
+                        {agency.devices.length === 0 ? "Sin TVs" : agency.devices.map(d => (
+                          <div key={d.id} className="mb-2">
+                            <div>TV {d.tv_number || "?"} · {!d.is_active ? "Inactivo" : d.installation_id && !d.revoked_at ? "Vinculado" : "Sin vincular"}</div>
+                            <Link href={`/monitoring/${d.id}`} className="mt-2 inline-flex items-center gap-1 rounded border border-cyan-400/30 px-2 py-1 text-xs text-cyan-300 transition-colors hover:bg-cyan-400/10 hover:text-cyan-200">
+                              <Activity className="h-3 w-3" /> Ver monitoreo
+                            </Link>
+                            <DeviceActions id={d.id} isLinked={Boolean(d.installation_id && !d.revoked_at)} isActive={d.is_active} />
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </td>
                   <td className="px-6 py-4">
@@ -61,19 +77,10 @@ export default async function AgenciesPage() {
                         return <span className="text-sm px-2 py-0.5 rounded-full border border-muted/20 bg-muted/10 text-muted">Sin TVs</span>;
                       }
                       const now = Date.now();
-                      const isOnline = agency.devices.some(d => (now - new Date(d.last_seen).getTime()) / 1000 < 60);
-                      
-                      return isOnline ? (
-                        <div className="flex items-center gap-2">
-                          <Activity className="h-4 w-4 text-primary" />
-                          <span className="text-sm px-2 py-0.5 rounded-full border border-primary/20 bg-primary/10 text-primary">Operativo</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <Activity className="h-4 w-4 text-danger" />
-                          <span className="text-sm px-2 py-0.5 rounded-full border border-danger/20 bg-danger/10 text-danger">Caída (Offline)</span>
-                        </div>
-                      );
+                      const states = agency.devices.map(d => getDeviceOperationalState(d, now));
+                      const state = states.includes("online") ? "online" : states.includes("delayed") ? "delayed" : states.includes("offline") ? "offline" : states.includes("unlinked") ? "unlinked" : "inactive";
+                      const color = state === "online" ? "border-primary/20 bg-primary/10 text-primary" : state === "delayed" ? "border-amber-400/20 bg-amber-400/10 text-amber-300" : state === "offline" ? "border-danger/20 bg-danger/10 text-danger" : "border-slate-500/20 bg-slate-500/10 text-slate-400";
+                      return <div className="flex items-center gap-2"><Activity className="h-4 w-4" /><span className={`text-sm px-2 py-0.5 rounded-full border ${color}`}>{operationalStateLabel(state)}</span></div>;
                     })()}
                   </td>
                   <td className="px-6 py-4 text-right">

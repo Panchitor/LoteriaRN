@@ -1,9 +1,13 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
-const SECRET_KEY = new TextEncoder().encode(
-  process.env.JWT_SECRET || "loteria_rn_super_secret_key_2026_dev"
-);
+function getSecretKey() {
+  const secret = process.env.JWT_SECRET;
+  if (!secret && process.env.NODE_ENV === "production") {
+    throw new Error("JWT_SECRET is required in production");
+  }
+  return new TextEncoder().encode(secret || "development-only-secret-change-me");
+}
 
 export type AuthUser = {
   id: string;
@@ -17,12 +21,12 @@ export async function signToken(payload: AuthUser): Promise<string> {
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("24h")
-    .sign(SECRET_KEY);
+    .sign(getSecretKey());
 }
 
 export async function verifyToken(token: string): Promise<AuthUser | null> {
   try {
-    const { payload } = await jwtVerify(token, SECRET_KEY);
+    const { payload } = await jwtVerify(token, getSecretKey());
     return payload as AuthUser;
   } catch (error) {
     return null;

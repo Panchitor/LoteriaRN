@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { Activity, HardDrive, Wifi, ArrowLeft, MonitorPlay, CheckCircle, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { getDeviceOperationalState, operationalStateLabel } from "@/lib/deviceStatus";
+import { RemoteControls } from "./RemoteControls";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +20,9 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ id:
 
   const now = Date.now();
   const diffSec = (now - new Date(device.last_seen).getTime()) / 1000;
-  const isOnline = diffSec < 30;
+  const operationalState = getDeviceOperationalState(device, now);
+  const isOnline = operationalState === "online";
+  const stateColor = operationalState === "online" ? "text-[#32d74b]" : operationalState === "delayed" ? "text-amber-300" : operationalState === "inactive" ? "text-slate-500" : "text-[#ff453a]";
 
   return (
     <div className="p-8 pb-20 sm:p-10 font-[family-name:var(--font-geist-sans)] max-w-5xl mx-auto w-full">
@@ -33,7 +37,7 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ id:
       <div className="flex justify-between items-start mb-8">
         <div>
           <h1 className="text-4xl font-extrabold text-white tracking-tight flex items-center gap-4">
-            <Activity className={isOnline ? "text-[#32d74b]" : "text-[#ff453a]"} />
+            <Activity className={stateColor} />
             Agencia {device.agency.number}
             {device.agency.name && <span className="text-muted text-2xl font-medium">/ {device.agency.name}</span>}
           </h1>
@@ -42,13 +46,9 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ id:
           </p>
         </div>
         
-        <div className={`px-4 py-2 rounded-sm border flex items-center gap-2 font-bold uppercase tracking-widest ${
-          isOnline 
-             ? "bg-[#163620] border-[#32d74b] text-[#32d74b]" 
-             : "bg-[#3d1616] border-[#ff453a] text-[#ff453a]"
-        }`}>
+        <div className={`px-4 py-2 rounded-sm border flex items-center gap-2 font-bold uppercase tracking-widest ${isOnline ? "bg-[#163620] border-[#32d74b] text-[#32d74b]" : operationalState === "delayed" ? "bg-amber-950/40 border-amber-400 text-amber-300" : operationalState === "inactive" ? "bg-slate-900 border-slate-600 text-slate-500" : "bg-[#3d1616] border-[#ff453a] text-[#ff453a]"}`}>
           {isOnline ? <CheckCircle className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
-          {isOnline ? "OPERATIVO" : "SIN CONEXIÓN"}
+          {operationalStateLabel(operationalState)}
         </div>
       </div>
 
@@ -85,6 +85,18 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ id:
             <div className="flex justify-between border-b border-[#374151] pb-2">
                <span className="text-muted">Version App:</span>
                <span className="text-white font-mono">{device.app_version || 'N/A'}</span>
+            </div>
+            <div className="flex justify-between gap-4 border-b border-[#374151] pb-2">
+               <span className="text-muted">Android:</span>
+               <span className="text-right text-white font-mono">{device.android_version || 'No reportado'}</span>
+            </div>
+            <div className="flex justify-between gap-4 border-b border-[#374151] pb-2">
+               <span className="text-muted">Fabricante / Modelo:</span>
+               <span className="text-right text-white font-mono">{device.device_model || 'No reportado'}</span>
+            </div>
+            <div className="flex justify-between gap-4 border-b border-[#374151] pb-2">
+               <span className="text-muted">Serie / ID físico:</span>
+               <span className="max-w-[65%] break-all text-right text-white font-mono">{device.device_serial || 'No reportado'}</span>
             </div>
             <div className="flex justify-between border-b border-[#374151] pb-2">
                <span className="text-muted">Almacenamiento Libre:</span>
@@ -141,6 +153,40 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ id:
           </div>
         </div>
       </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="bg-[#181b1f] border border-[#374151] p-6 shadow-xl lg:col-span-2">
+          <h3 className="text-sm font-bold text-muted uppercase tracking-widest mb-4">Última captura remota</h3>
+          {device.last_screenshot ? (
+            <div>
+              <img src={`${device.last_screenshot}?v=${device.screenshot_at?.getTime() || 0}`} alt={`Captura de Agencia ${device.agency.number}`} className="w-full rounded border border-[#374151] bg-black object-contain" />
+              <p className="mt-3 text-xs text-muted">Capturada: {device.screenshot_at?.toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })}</p>
+            </div>
+          ) : <div className="grid min-h-52 place-items-center rounded border border-dashed border-[#374151] text-sm text-muted">Todavía no hay capturas de este dispositivo.</div>}
+        </div>
+        <div className="bg-[#181b1f] border border-[#374151] p-6 shadow-xl">
+          <h3 className="text-sm font-bold text-muted uppercase tracking-widest mb-4">Control remoto</h3>
+          <RemoteControls deviceId={device.id} screenshotPending={device.screenshot_requested} restartPending={device.restart_requested} screenshotUnsupported={Boolean(device.last_command_status?.includes("Android 8 o superior"))} />
+          <div className="mt-6 border-t border-[#374151] pt-4 text-xs text-muted">
+            <p>Última orden: <span className="text-white">{device.last_command === "screenshot" ? "Captura" : device.last_command === "restart" ? "Reinicio" : "—"}</span></p>
+            <p className="mt-2">Resultado: <span className={device.last_command_status === "success" || device.last_command_status === "accepted" ? "text-primary" : device.last_command_status?.startsWith("error") ? "text-danger" : "text-amber-300"}>{friendlyCommandStatus(device.last_command_status)}</span></p>
+            <p className="mt-2">Fecha: <span className="text-white">{device.last_command_at ? formatDateTime(device.last_command_at) : "—"}</span></p>
+          </div>
+        </div>
+      </div>
     </div>
   );
+}
+
+function friendlyCommandStatus(status: string | null) {
+  if (!status) return "—";
+  if (status === "success") return "Completada";
+  if (status === "accepted") return "Aceptado por el dispositivo";
+  if (status === "pending") return "Pendiente";
+  if (status.includes("Android 8 o superior")) return "Captura no compatible con este TV Box";
+  return status.replace(/^error:\s*/i, "Error: ");
+}
+
+function formatDateTime(date: Date) {
+  return new Intl.DateTimeFormat("es-AR", { timeZone: "America/Argentina/Buenos_Aires", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(date);
 }

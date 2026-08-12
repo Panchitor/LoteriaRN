@@ -3,8 +3,10 @@
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/hash";
 import { revalidatePath } from "next/cache";
+import { requireAdmin } from "@/lib/authorization";
 
 export async function getUsers() {
+  await requireAdmin();
   const users = await prisma.user.findMany({
     select: { id: true, username: true, role: true, created_at: true },
     orderBy: { created_at: 'desc' }
@@ -13,6 +15,7 @@ export async function getUsers() {
 }
 
 export async function createUser(data: FormData) {
+  await requireAdmin();
   const username = data.get("username") as string;
   const password = data.get("password") as string;
   const role = data.get("role") as string;
@@ -41,6 +44,7 @@ export async function createUser(data: FormData) {
 }
 
 export async function deleteUser(id: string) {
+  await requireAdmin();
   // Prevent deleting the very last admin
   const user = await prisma.user.findUnique({ where: { id } });
   if (user?.role === 'ADMIN') {
@@ -56,6 +60,7 @@ export async function deleteUser(id: string) {
 }
 
 export async function changePassword(id: string, newPass: string) {
+  await requireAdmin();
   if (!newPass) return { error: "La contraseña no puede estar vacía." };
   const password_hash = await hashPassword(newPass);
   

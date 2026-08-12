@@ -11,8 +11,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    const device = await prisma.device.findUnique({
-      where: { id: token }
+    const device = await prisma.device.findFirst({
+      where: { id: token, revoked_at: null, installation_id: { not: null } }
     });
 
     if (!device) {

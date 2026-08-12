@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, X, FileVideo, Trash2, RefreshCw, Image as ImageIcon, GripVertical, Play } from "lucide-react";
-import { deleteVideo, reorderVideos } from "./actions";
+import { Upload, X, FileVideo, Trash2, RefreshCw, Image as ImageIcon, GripVertical, Play, Save } from "lucide-react";
+import { deleteVideo, reorderVideos, updateImageDuration } from "./actions";
 
 export function VideoUpload() {
   const router = useRouter();
@@ -161,6 +161,42 @@ export function DeleteVideoButton({ id }: { id: string }) {
   );
 }
 
+function ImageDurationEditor({ id, initialDuration }: { id: string; initialDuration: number }) {
+  const [duration, setDuration] = useState(initialDuration);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  return (
+    <div className="inline-flex items-center gap-1 mt-2" onClick={e => e.stopPropagation()}>
+      <input
+        type="number"
+        min={3}
+        max={3600}
+        value={duration}
+        onChange={e => { setDuration(Number(e.target.value)); setSaved(false); }}
+        className="w-20 bg-background border border-border rounded px-2 py-1 text-xs text-white"
+        aria-label="Duración de la imagen en segundos"
+      />
+      <span className="text-xs text-muted">seg</span>
+      <button
+        type="button"
+        disabled={saving || duration === initialDuration}
+        onClick={async () => {
+          setSaving(true);
+          const result = await updateImageDuration(id, duration);
+          setSaving(false);
+          if (result.success) setSaved(true);
+        }}
+        className="p-1.5 text-primary hover:bg-primary/10 rounded disabled:opacity-40"
+        title="Guardar duración"
+      >
+        {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+      </button>
+      {saved && <span className="text-xs text-primary">Guardado</span>}
+    </div>
+  );
+}
+
 interface SortableVideo {
   id: string;
   original_name: string;
@@ -256,9 +292,12 @@ export function ReorderableTable({ videos }: { videos: SortableVideo[] }) {
                 <td className="px-3 py-4 text-muted font-mono">{index + 1}</td>
                 <td className="px-3 py-4">
                   {video.media_type === 'image' ? (
-                    <span className="inline-flex items-center gap-1 text-xs bg-purple-500/20 text-purple-400 px-2 py-1 rounded-full">
-                      <ImageIcon className="h-3 w-3" /> {video.display_duration}s
-                    </span>
+                    <div>
+                      <span className="inline-flex items-center gap-1 text-xs bg-purple-500/20 text-purple-400 px-2 py-1 rounded-full">
+                        <ImageIcon className="h-3 w-3" /> Imagen
+                      </span>
+                      <ImageDurationEditor id={video.id} initialDuration={video.display_duration} />
+                    </div>
                   ) : (
                     <span className="inline-flex items-center gap-1 text-xs bg-primary/20 text-primary px-2 py-1 rounded-full">
                       <FileVideo className="h-3 w-3" /> Video

@@ -1,22 +1,24 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-primary: #00a8e8; /* Lotería Light Blue */
-  --color-primary-hover: #008fcc;
+  --color-primary: #00c878;
+  --color-primary-hover: #00a965;
 
-  --color-background: #001a33; /* Dark Blue from Lotería RN */
-  --color-surface: #00284d; /* Slightly lighter blue */
-  --color-surface-hover: #003666; /* Lighter blue */
+  --color-background: #061711;
+  --color-surface: #0b2119;
+  --color-surface-hover: #123328;
   
   --color-foreground: #f8fafc; /* Slate 50 */
-  --color-muted: #94a3b8; /* Slate 400 */
+  --color-muted: #9aada5;
   
-  --color-border: #003666;
-  --color-danger: #ef4444; /* Red 500 */
+  --color-border: #1b4636;
+  --color-danger: #ef3340;
 }
 
 body {
-  background-color: var(--color-background);
+  background:
+    radial-gradient(circle at 85% 0%, rgba(0, 200, 120, 0.09), transparent 32rem),
+    var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
   margin: 0;
@@ -26,10 +28,10 @@ body {
 
 /* Glassmorphism utilities */
 .glass {
-  background: rgba(30, 41, 59, 0.7);
+  background: rgba(11, 33, 25, 0.82);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(90, 190, 145, 0.13);
 }
 
 /* Custom Scrollbar */

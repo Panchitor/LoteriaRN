@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-export SSHPASS="Canal&10&RioNegro"
+: "${SSHPASS:?Set SSHPASS in the environment}"
 
 # Create downloads dir
 sshpass -e ssh -o StrictHostKeyChecking=no -p 5753 root@149.50.139.29 "mkdir -p /var/www/loteria/server/public/downloads"

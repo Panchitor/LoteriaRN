@@ -8,7 +8,8 @@ try {
   console.log("dotenv not loaded, using system env");
 }
 
-const connectionString = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/loteria?schema=public";
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) throw new Error("DATABASE_URL is required");
 const pool = new Pool({ connectionString });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });

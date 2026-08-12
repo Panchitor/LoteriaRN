@@ -9,6 +9,7 @@ node_modules/
 # Android build outputs & Gradle
 .gradle/
 **/.gradle/
+**/.gradle-user/
 build/
 **/build/
 
@@ -34,6 +35,13 @@ postgres-data/
 
 # Compressed archives
 *.tar.gz
+
+# Local deployment credentials and recovery artifacts
+.secrets/
+backups/
+*.dump
+*.pem
+*.key
 
 # System & IDE files
 .DS_Store

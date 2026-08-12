@@ -1,6 +1,6 @@
 {
   "name": "app-tv",
-  "version": "1.0.18",
+  "version": "1.0.75",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",

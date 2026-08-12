@@ -2,8 +2,10 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { requireAdmin } from "@/lib/authorization";
 
 export async function getLiveState() {
+  await requireAdmin();
   let liveEvent = await prisma.liveEvent.findFirst();
   if (!liveEvent) {
     liveEvent = await prisma.liveEvent.create({
@@ -26,6 +28,7 @@ export async function getLiveState() {
 }
 
 export async function toggleLive(isActive: boolean, url: string, pollInterval: number) {
+  await requireAdmin();
   const liveEvent = await getLiveState();
   
   await prisma.liveEvent.update({

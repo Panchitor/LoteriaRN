@@ -7,7 +7,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   
   // Public routes (Login + API Endpoints that the Android TVs use)
-  if (pathname.startsWith('/login') || pathname.startsWith('/api/manifest') || pathname.startsWith('/api/telemetry') || pathname.startsWith('/api/register') || pathname.startsWith('/api/videos') || pathname.startsWith('/api/logs') || pathname.startsWith('/api/stats') || pathname.startsWith('/apk') || pathname.startsWith('/downloads')) {
+  if (pathname.startsWith('/login') || pathname.startsWith('/api/manifest') || pathname.startsWith('/api/telemetry') || pathname.startsWith('/api/register') || pathname.startsWith('/api/videos') || pathname.startsWith('/api/logs') || pathname.startsWith('/api/stats') || pathname.startsWith('/api/device-control') || pathname.startsWith('/apk') || pathname.startsWith('/downloads') || pathname.startsWith('/screenshots')) {
     if (token && pathname.startsWith('/login')) {
       return NextResponse.redirect(new URL('/', request.url))
     }

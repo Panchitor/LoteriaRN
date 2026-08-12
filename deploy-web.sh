@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-export SSHPASS="Canal&10&RioNegro"
+: "${SSHPASS:?Set SSHPASS in the environment}"
 cd /mnt/host/c/LotAgencia/server
 
 echo "Tarring .next..."
