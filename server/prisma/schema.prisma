@@ -43,6 +43,7 @@ model Device {
   last_seen         DateTime  @default(now())
   free_space        BigInt?
   app_version       String?
+  update_channel    String    @default("STABLE")
   installation_id   String?   @unique
   api_token_hash    String?
   revoked_at        DateTime?

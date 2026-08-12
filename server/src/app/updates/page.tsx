@@ -1,211 +1,118 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Upload, Download, Smartphone, Loader2, CheckCircle, Trash2, Calendar, HardDrive } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Download, FlaskConical, Loader2, Rocket, ShieldCheck, Smartphone, Trash2, Upload, XCircle } from "lucide-react";
 
-interface ApkVersion {
-  filename: string;
-  version: string;
-  sizeBytes: number;
-  createdAt: string;
-}
+type Device = { id: string; tv_number: number | null; app_version: string | null; update_channel: string; last_seen: string; device_model: string | null; agency: { number: number; subagency_number: number | null; city: string | null } };
+type Apk = { filename: string; version: string; sizeBytes: number; createdAt: string };
+type Data = { history: Apk[]; devices: Device[]; config: Record<string, string> };
 
 export default function UpdatesPage() {
+  const [data, setData] = useState<Data>({ history: [], devices: [], config: {} });
   const [file, setFile] = useState<File | null>(null);
   const [version, setVersion] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
-  const [history, setHistory] = useState<ApkVersion[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
 
-  const fetchHistory = async () => {
-    try {
-      const res = await fetch("/api/admin/updates");
-      if (res.ok) {
-        const data = await res.json();
-        setHistory(data.history || []);
-      }
-    } catch (e) {
-      console.error("Failed to load history");
-    } finally {
-      setLoadingHistory(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchHistory();
+  const load = useCallback(async () => {
+    const response = await fetch('/api/admin/updates', { cache: 'no-store' });
+    if (response.ok) setData(await response.json());
   }, []);
+  useEffect(() => { load(); }, [load]);
 
-  const handleUpload = async (e: React.FormEvent) => {
+  const pilotDevices = useMemo(() => data.devices.filter(d => d.update_channel === 'PILOT'), [data.devices]);
+  const pilotVersion = data.config.PILOT_APK_VERSION || '';
+  const stableVersion = data.config.LATEST_APK_VERSION || '—';
+
+  async function uploadPilot(e: React.FormEvent) {
     e.preventDefault();
     if (!file || !version) return;
+    setBusy(true); setMessage('');
+    const body = new FormData(); body.append('apk', file); body.append('version', version); body.append('channel', 'PILOT');
+    const response = await fetch('/api/admin/updates', { method: 'POST', body });
+    const result = await response.json();
+    setMessage(response.ok ? `APK ${version} publicada en PRUEBA. Todavía no se envió a ningún equipo.` : result.error);
+    if (response.ok) { setFile(null); setVersion(''); await load(); }
+    setBusy(false);
+  }
 
-    setLoading(true);
-    setMessage(null);
+  async function action(payload: object, confirmText?: string) {
+    if (confirmText && !confirm(confirmText)) return;
+    setBusy(true); setMessage('');
+    const response = await fetch('/api/admin/updates', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const result = await response.json();
+    setMessage(response.ok ? 'Operación realizada correctamente.' : result.error);
+    if (response.ok) { setSelected([]); await load(); }
+    setBusy(false);
+  }
 
-    const formData = new FormData();
-    formData.append("apk", file);
-    formData.append("version", version);
+  async function remove(filename: string) {
+    if (!confirm(`¿Eliminar ${filename}?`)) return;
+    const response = await fetch('/api/admin/updates', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename }) });
+    const result = await response.json();
+    setMessage(response.ok ? 'APK eliminada.' : result.error);
+    if (response.ok) await load();
+  }
 
-    try {
-      const res = await fetch("/api/admin/updates", {
-        method: "POST",
-        body: formData,
-      });
+  return <div className="p-6 sm:p-10 max-w-6xl mx-auto w-full space-y-8">
+    <header>
+      <h1 className="text-3xl font-extrabold text-white flex items-center gap-3"><Download className="text-primary" /> Actualizaciones APK</h1>
+      <p className="text-muted mt-2">Probá una APK en equipos seleccionados antes de publicarla de forma masiva.</p>
+    </header>
 
-      const data = await res.json();
-      if (res.ok) {
-        setMessage({ type: 'success', text: '¡Actualización publicada con éxito! Los televisores la detectarán pronto.' });
-        setFile(null);
-        setVersion("");
-        fetchHistory(); // Refresh history
-      } else {
-        setMessage({ type: 'error', text: data.error || 'Ocurrió un error.' });
-      }
-    } catch (err) {
-      setMessage({ type: 'error', text: 'Error de red.' });
-    }
-    
-    setLoading(false);
-  };
+    {message && <div className="rounded-lg border border-primary/30 bg-primary/10 p-4 text-white">{message}</div>}
 
-  const handleDelete = async (filename: string) => {
-    if (!confirm(`¿Estás seguro de que deseas eliminar la versión ${filename}?`)) return;
-
-    try {
-      const res = await fetch("/api/admin/updates", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename }),
-      });
-
-      if (res.ok) {
-        fetchHistory(); // Refresh history
-      } else {
-        const data = await res.json();
-        alert(data.error || "Error al eliminar");
-      }
-    } catch (e) {
-      alert("Error de red");
-    }
-  };
-
-  return (
-    <div className="p-8 pb-20 sm:p-10 font-[family-name:var(--font-geist-sans)] max-w-4xl mx-auto w-full">
-      <div className="mb-8">
-        <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
-          <Download className="h-8 w-8 text-primary" />
-          Actualizaciones OTA
-        </h1>
-        <p className="text-muted mt-2">
-          Sube un nuevo archivo `.apk` de la aplicación de TV. Los televisores detectarán la versión automáticamente y la instalarán.
-        </p>
+    <section className="grid md:grid-cols-2 gap-5">
+      <div className="glass border border-border rounded-2xl p-6">
+        <div className="flex items-center gap-3"><ShieldCheck className="text-primary" /><div><p className="text-xs uppercase text-muted">Canal estable</p><p className="text-2xl font-bold text-white">v{stableVersion}</p></div></div>
+        <p className="text-sm text-muted mt-4">La reciben todos los equipos que no estén seleccionados para pruebas.</p>
       </div>
-
-      {message && (
-        <div className={`p-4 mb-6 rounded-lg border font-medium flex items-center gap-2 ${message.type === 'success' ? 'bg-primary/10 border-primary/20 text-primary' : 'bg-danger/10 border-danger/20 text-danger'}`}>
-          {message.type === 'success' && <CheckCircle className="w-5 h-5" />}
-          {message.text}
-        </div>
-      )}
-
-      <div className="glass rounded-2xl border border-border p-6 shadow-xl mb-10">
-        <form onSubmit={handleUpload} className="space-y-6">
-          <div>
-            <label className="text-sm font-semibold text-muted mb-2 block">Número de Versión</label>
-            <input 
-              type="text" 
-              required
-              value={version}
-              onChange={(e) => setVersion(e.target.value)}
-              placeholder="Ejemplo: 1.0.2"
-              className="w-full bg-background border border-border rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all placeholder:text-muted/50"
-            />
-            <p className="text-xs text-muted/60 mt-2">Debe ser superior a la versión actual de las TVs para que la instalen.</p>
-          </div>
-
-          <div>
-            <label className="text-sm font-semibold text-muted mb-2 block">Archivo APK</label>
-            <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/50 transition-colors bg-background/50">
-              <input 
-                type="file" 
-                accept=".apk"
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
-                className="hidden" 
-                id="apk-upload" 
-              />
-              <label htmlFor="apk-upload" className="cursor-pointer flex flex-col items-center gap-3">
-                <div className={`p-4 rounded-full ${file ? 'bg-primary/20 text-primary' : 'bg-background text-muted'}`}>
-                  <Smartphone className="w-8 h-8" />
-                </div>
-                {file ? (
-                  <div>
-                    <p className="text-white font-medium">{file.name}</p>
-                    <p className="text-xs text-muted">{(file.size / (1024 * 1024)).toFixed(2)} MB</p>
-                  </div>
-                ) : (
-                  <div>
-                    <p className="text-white font-medium">Haz clic para seleccionar el APK</p>
-                    <p className="text-xs text-muted">Solo archivos .apk de Android</p>
-                  </div>
-                )}
-              </label>
-            </div>
-          </div>
-
-          <button 
-            type="submit" 
-            disabled={loading || !file || !version}
-            className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary-hover text-white px-6 py-4 rounded-lg font-bold transition-colors border border-primary-hover shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Upload className="w-6 h-6" />}
-            {loading ? "Subiendo APK al Servidor..." : "Publicar Actualización OTA"}
-          </button>
-        </form>
+      <div className="glass border border-amber-400/30 rounded-2xl p-6">
+        <div className="flex items-center gap-3"><FlaskConical className="text-amber-300" /><div><p className="text-xs uppercase text-muted">Canal de prueba</p><p className="text-2xl font-bold text-white">{pilotVersion ? `v${pilotVersion}` : 'Sin APK'}</p></div></div>
+        <p className="text-sm text-muted mt-4">{pilotDevices.length} equipo(s) habilitado(s) para probar.</p>
       </div>
+    </section>
 
-      <div className="mt-8">
-        <h2 className="text-xl font-bold text-white mb-6">Historial de Versiones</h2>
-        {loadingHistory ? (
-          <div className="flex justify-center p-8">
-            <Loader2 className="w-8 h-8 text-primary animate-spin" />
-          </div>
-        ) : history.length === 0 ? (
-          <div className="p-8 text-center border border-border rounded-xl bg-background/50 text-muted">
-            No hay versiones subidas todavía.
-          </div>
-        ) : (
-          <div className="grid gap-4">
-            {history.map((apk, i) => (
-              <div key={i} className="flex items-center justify-between p-4 glass rounded-xl border border-border">
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2">
-                    <Smartphone className="w-5 h-5 text-primary" />
-                    <span className="font-bold text-white text-lg">v{apk.version}</span>
-                  </div>
-                  <div className="flex items-center gap-4 text-xs text-muted">
-                    <span className="flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5" />
-                      {new Date(apk.createdAt).toLocaleString()}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <HardDrive className="w-3.5 h-3.5" />
-                      {(apk.sizeBytes / (1024 * 1024)).toFixed(2)} MB
-                    </span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleDelete(apk.filename)}
-                  className="p-3 text-danger/70 hover:text-danger hover:bg-danger/10 rounded-lg transition-colors"
-                  title="Eliminar versión"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+    <section className="glass border border-border rounded-2xl p-6">
+      <h2 className="text-xl font-bold text-white mb-1">1. Subir APK de prueba</h2>
+      <p className="text-sm text-muted mb-5">Subirla no actualiza ningún TV Box hasta que lo selecciones abajo.</p>
+      <form onSubmit={uploadPilot} className="grid md:grid-cols-[180px_1fr_auto] gap-3 items-end">
+        <label className="text-sm text-muted">Versión<input required value={version} onChange={e => setVersion(e.target.value)} placeholder="1.0.76" className="mt-2 w-full bg-background border border-border rounded-lg px-3 py-3 text-white" /></label>
+        <label className="text-sm text-muted">Archivo APK<input required type="file" accept=".apk" onChange={e => setFile(e.target.files?.[0] || null)} className="mt-2 block w-full bg-background border border-border rounded-lg px-3 py-2 text-white" /></label>
+        <button disabled={busy || !file || !version} className="bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-lg px-5 py-3 disabled:opacity-50 flex gap-2"><Upload /> Subir a prueba</button>
+      </form>
+    </section>
+
+    <section className="glass border border-border rounded-2xl p-6">
+      <h2 className="text-xl font-bold text-white">2. Elegir dispositivos piloto</h2>
+      <p className="text-sm text-muted mt-1 mb-5">Al habilitarlos recibirán la APK piloto en el próximo contacto. Podés devolverlos al canal estable.</p>
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-muted border-b border-border"><th className="p-3"></th><th>Dispositivo</th><th>Ciudad</th><th>Versión actual</th><th>Canal</th><th>Último contacto</th></tr></thead><tbody>
+        {data.devices.map(d => <tr key={d.id} className="border-b border-border/60 text-white">
+          <td className="p-3"><input type="checkbox" checked={selected.includes(d.id)} onChange={e => setSelected(s => e.target.checked ? [...s, d.id] : s.filter(id => id !== d.id))} /></td>
+          <td className="font-semibold">Ag. {d.agency.number}{d.agency.subagency_number ? ` / Sub. ${d.agency.subagency_number}` : ''} · TV {d.tv_number || '—'}<span className="block text-xs text-muted font-normal">{d.device_model || 'Modelo sin informar'}</span></td>
+          <td>{d.agency.city || 'Sin ciudad'}</td><td>{d.app_version || '—'}</td>
+          <td><span className={`rounded-full px-2 py-1 text-xs font-bold ${d.update_channel === 'PILOT' ? 'bg-amber-400/15 text-amber-300' : 'bg-primary/15 text-primary'}`}>{d.update_channel === 'PILOT' ? 'PRUEBA' : 'ESTABLE'}</span></td>
+          <td>{new Date(d.last_seen).toLocaleString()}</td>
+        </tr>)}
+      </tbody></table></div>
+      <div className="flex flex-wrap gap-3 mt-5">
+        <button disabled={busy || !pilotVersion || selected.length === 0} onClick={() => action({ action: 'assign', channel: 'PILOT', deviceIds: selected }, `¿Enviar la APK piloto v${pilotVersion} a ${selected.length} dispositivo(s)?`)} className="bg-amber-500 text-black font-bold px-4 py-2 rounded-lg disabled:opacity-40 flex gap-2"><FlaskConical /> Habilitar prueba</button>
+        <button disabled={busy || selected.length === 0} onClick={() => action({ action: 'assign', channel: 'STABLE', deviceIds: selected })} className="border border-primary text-primary font-bold px-4 py-2 rounded-lg disabled:opacity-40">Volver a estable</button>
       </div>
-    </div>
-  );
+    </section>
+
+    <section className="glass border border-border rounded-2xl p-6">
+      <h2 className="text-xl font-bold text-white">3. Finalizar prueba</h2>
+      <div className="flex flex-wrap gap-3 mt-4">
+        <button disabled={busy || !pilotVersion} onClick={() => action({ action: 'promote' }, `¿Publicar v${pilotVersion} para TODOS los dispositivos? Esta acción inicia la distribución masiva.`)} className="bg-primary text-black font-bold px-5 py-3 rounded-lg disabled:opacity-40 flex gap-2"><Rocket /> Aprobar y publicar masivamente</button>
+        <button disabled={busy || !pilotVersion} onClick={() => action({ action: 'cancel' }, '¿Cancelar la prueba y devolver todos los equipos al canal estable?')} className="border border-danger text-danger font-bold px-5 py-3 rounded-lg disabled:opacity-40 flex gap-2"><XCircle /> Cancelar prueba</button>
+      </div>
+    </section>
+
+    <section><h2 className="text-xl font-bold text-white mb-4">Archivos disponibles</h2><div className="grid gap-3">
+      {data.history.map(apk => <div key={apk.filename} className="glass border border-border rounded-xl p-4 flex items-center justify-between"><div className="flex gap-3 items-center"><Smartphone className="text-primary" /><div><p className="font-bold text-white">v{apk.version}</p><p className="text-xs text-muted">{(apk.sizeBytes / 1048576).toFixed(1)} MB · {new Date(apk.createdAt).toLocaleString()}</p></div></div><button onClick={() => remove(apk.filename)} className="text-danger p-2" title="Eliminar"><Trash2 /></button></div>)}
+    </div></section>
+    {busy && <div className="fixed inset-0 bg-black/40 grid place-items-center"><Loader2 className="animate-spin text-primary w-10 h-10" /></div>}
+  </div>;
 }
