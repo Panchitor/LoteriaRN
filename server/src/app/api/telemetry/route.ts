@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { errorMessage } from "@/lib/errors";
+import { authenticateDevice } from "@/lib/deviceAuth";
+import { enforceRateLimit, opaqueRateKey, readJsonBody, requestErrorResponse } from "@/lib/requestGuards";
 
 type TelemetryBody = {
   token?: string;
@@ -16,17 +18,14 @@ type TelemetryBody = {
 
 export async function POST(req: NextRequest) {
   try {
-    let body: TelemetryBody = {};
-    try {
-      body = await req.json();
-    } catch {
-      console.error("Failed to parse telemetry json body");
-    }
+    const body = await readJsonBody<TelemetryBody>(req, 64 * 1024);
     const { token, playbackStatus, freeSpace, appVersion, hardwareId, downloadedVideos, androidVersion, deviceModel, deviceSerial } = body;
 
     if (!token) {
       return NextResponse.json({ error: "Missing token" }, { status: 400 });
     }
+    const limited = enforceRateLimit(req, "telemetry", opaqueRateKey(token), 30, 60 * 1000);
+    if (limited) return limited;
 
     // 1. Update the Device (Heartbeat)
     let videosStr = undefined;
@@ -34,10 +33,7 @@ export async function POST(req: NextRequest) {
       videosStr = typeof downloadedVideos === 'string' ? downloadedVideos : JSON.stringify(downloadedVideos);
     }
 
-    const authorizedDevice = await prisma.device.findFirst({
-      where: { id: token, revoked_at: null, installation_id: { not: null } },
-      select: { id: true, screenshot_requested: true, restart_requested: true, update_channel: true },
-    });
+    const authorizedDevice = await authenticateDevice(token);
     if (!authorizedDevice) {
       return NextResponse.json({ error: "DEVICE_REVOKED" }, { status: 401 });
     }
@@ -64,15 +60,18 @@ export async function POST(req: NextRequest) {
 
     // 3. Fetch Latest APK Version, Emergency, and Failover Server URLs from SystemConfig
     const configs = await prisma.systemConfig.findMany({
-      where: { key: { in: ['LATEST_APK_VERSION', 'LATEST_APK_URL', 'PILOT_APK_VERSION', 'PILOT_APK_URL', 'FLUSSONIC_POLL_INTERVAL', 'EMERGENCY_ACTIVE', 'EMERGENCY_MESSAGE', 'PRIMARY_API_URL', 'SECONDARY_API_URL'] } }
+      where: { key: { in: ['LATEST_APK_VERSION', 'LATEST_APK_URL', 'LATEST_APK_SHA256', 'PILOT_APK_VERSION', 'PILOT_APK_URL', 'PILOT_APK_SHA256', 'FLUSSONIC_POLL_INTERVAL', 'EMERGENCY_ACTIVE', 'EMERGENCY_MESSAGE', 'PRIMARY_API_URL', 'SECONDARY_API_URL'] } }
     });
     const stableApkVersion = configs.find(c => c.key === 'LATEST_APK_VERSION')?.value || null;
     const stableApkUrl = configs.find(c => c.key === 'LATEST_APK_URL')?.value || null;
+    const stableApkSha256 = configs.find(c => c.key === 'LATEST_APK_SHA256')?.value || null;
     const pilotApkVersion = configs.find(c => c.key === 'PILOT_APK_VERSION')?.value || null;
     const pilotApkUrl = configs.find(c => c.key === 'PILOT_APK_URL')?.value || null;
-    const usePilot = authorizedDevice.update_channel === 'PILOT' && Boolean(pilotApkVersion && pilotApkUrl);
+    const pilotApkSha256 = configs.find(c => c.key === 'PILOT_APK_SHA256')?.value || null;
+    const usePilot = authorizedDevice.update_channel === 'PILOT' && Boolean(pilotApkVersion && pilotApkUrl && pilotApkSha256);
     const latestApkVersion = usePilot ? pilotApkVersion : stableApkVersion;
     const latestApkUrl = usePilot ? pilotApkUrl : stableApkUrl;
+    const latestApkSha256 = usePilot ? pilotApkSha256 : stableApkSha256;
     const pollInterval = parseInt(configs.find(c => c.key === 'FLUSSONIC_POLL_INTERVAL')?.value || '10', 10);
     const emergencyActive = configs.find(c => c.key === 'EMERGENCY_ACTIVE')?.value || 'false';
     const emergencyMessage = configs.find(c => c.key === 'EMERGENCY_MESSAGE')?.value || '';
@@ -85,6 +84,7 @@ export async function POST(req: NextRequest) {
       timestamp: Date.now(),
       latestApkVersion,
       latestApkUrl,
+      latestApkSha256,
       updateChannel: usePilot ? 'PILOT' : 'STABLE',
       pollInterval,
       emergency: emergencyActive === 'true',
@@ -93,14 +93,12 @@ export async function POST(req: NextRequest) {
       secondaryApiUrl,
       screenshotRequested: authorizedDevice.screenshot_requested,
       restartRequested: authorizedDevice.restart_requested,
-    }, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-      }
     });
 
   } catch (error: unknown) {
+    const requestError = requestErrorResponse(error);
+    if (requestError) return requestError;
     console.error("TELEMETRY ROUTE ERROR:", errorMessage(error));
-    return NextResponse.json({ error: "Internal Error" }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
+    return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
 }

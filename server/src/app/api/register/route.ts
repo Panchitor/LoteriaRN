@@ -1,10 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { errorCode, errorMessage } from "@/lib/errors";
+import { createDeviceToken } from "@/lib/deviceToken";
+import { clientAddress, enforceRateLimit, readJsonBody, requestErrorResponse } from "@/lib/requestGuards";
+
+type RegisterBody = {
+  activationCode?: unknown; agencyNumber?: unknown; subagencyNumber?: unknown;
+  tvNumber?: unknown; installationId?: unknown; assetLabel?: unknown;
+};
 
 export async function POST(req: NextRequest) {
   try {
-    const { activationCode, agencyNumber, subagencyNumber, tvNumber, installationId, assetLabel } = await req.json();
+    const limited = enforceRateLimit(req, "register", clientAddress(req), 20, 10 * 60 * 1000);
+    if (limited) return limited;
+    const body = await readJsonBody<RegisterBody>(req, 16 * 1024);
+    const activationCode = body.activationCode == null ? "" : String(body.activationCode);
+    const agencyNumber = body.agencyNumber == null ? "" : String(body.agencyNumber);
+    const subagencyNumber = body.subagencyNumber == null ? "" : String(body.subagencyNumber);
+    const tvNumber = body.tvNumber == null ? "" : String(body.tvNumber);
+    const installationId = body.installationId == null ? "" : String(body.installationId);
+    const assetLabel = body.assetLabel;
     const label = assetLabel == null ? undefined : String(assetLabel).trim().toUpperCase();
     if (label !== undefined && !/^[A-Z0-9][A-Z0-9_-]{2,39}$/.test(label)) {
       return NextResponse.json({ error: "El ID de etiqueta debe tener entre 3 y 40 letras, números, guiones o guiones bajos." }, { status: 400 });
@@ -31,6 +46,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "El dispositivo reservado no está disponible." }, { status: 403 });
       }
 
+      const credential = createDeviceToken(activation.device_id);
       const claimed = await prisma.$transaction(async (tx) => {
         const consumed = await tx.deviceActivationCode.updateMany({
           where: { id: activation.id, used_at: null, expires_at: { gt: new Date() } },
@@ -39,19 +55,24 @@ export async function POST(req: NextRequest) {
         if (consumed.count !== 1) throw new Error("ACTIVATION_ALREADY_USED");
         return tx.device.update({
           where: { id: activation.device_id },
-          data: { installation_id: String(installationId), revoked_at: null, status: "online", asset_label: label },
+          data: { installation_id: String(installationId), api_token_hash: credential.hash, revoked_at: null, status: "online", asset_label: label },
           include: { agency: true },
         });
       });
 
       return NextResponse.json({
         success: true,
-        token: claimed.id,
+        token: credential.token,
         agency_name: claimed.agency.city || `Agencia ${claimed.agency.number}`,
       });
     }
 
     // Compatibilidad temporal con instalaciones anteriores a la vinculación por código.
+    const legacyRegistrationAllowed = process.env.NODE_ENV !== "production"
+      || process.env.ALLOW_LEGACY_DEVICE_REGISTRATION === "true";
+    if (!legacyRegistrationAllowed) {
+      return NextResponse.json({ error: "El registro por agencia fue reemplazado por códigos de activación." }, { status: 410 });
+    }
     if (!agencyNumber) {
       return NextResponse.json({ error: "Falta el código de vinculación." }, { status: 400 });
     }
@@ -66,7 +87,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (!agency) {
-      return NextResponse.json({ error: "Número de agencia no registrado en la central." }, { status: 403, headers: { 'Access-Control-Allow-Origin': '*' } });
+      return NextResponse.json({ error: "Número de agencia no registrado en la central." }, { status: 403 });
     }
 
     // Provision a Device specifically for this agency or reuse the first existing one
@@ -90,20 +111,24 @@ export async function POST(req: NextRequest) {
           });
     }
 
+    const credential = createDeviceToken(device.id);
+    await prisma.device.update({
+      where: { id: device.id },
+      data: { api_token_hash: credential.hash },
+    });
+
     // Return the device ID as the secure token
     return NextResponse.json({
       success: true,
-      token: device.id,
+      token: credential.token,
       agency_name: agency.name || `Agencia ${agency.number}`
-    }, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-      }
     });
 
   } catch (error: unknown) {
+    const requestError = requestErrorResponse(error);
+    if (requestError) return requestError;
     if (errorCode(error) === 'P2002') return NextResponse.json({ error: "Ese ID de etiqueta o instalación ya está asignado a otro dispositivo. Revise el registro antes de vincular." }, { status: 409 });
     console.error("Register Error:", errorMessage(error));
-    return NextResponse.json({ error: "Error interno del servidor." }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
+    return NextResponse.json({ error: "Error interno del servidor." }, { status: 500 });
   }
 }

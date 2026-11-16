@@ -19,13 +19,9 @@ export async function GET() {
       live: liveEvent.is_active,
       url: liveEvent.url,
       timestamp: Date.now()
-    }, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-      }
     });
 
   } catch {
-    return NextResponse.json({ live: false, error: "Internal Error" }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
+    return NextResponse.json({ live: false, error: "Internal Error" }, { status: 500 });
   }
 }

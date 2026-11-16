@@ -136,6 +136,28 @@ class SilentInstallModule(private val reactContext: ReactApplicationContext) : R
     }
 
     @ReactMethod
+    fun sha256File(filePath: String, promise: Promise) {
+        Thread {
+            try {
+                val file = File(filePath.removePrefix("file://"))
+                require(file.exists() && file.isFile) { "El archivo no existe" }
+                val digest = MessageDigest.getInstance("SHA-256")
+                FileInputStream(file).use { input ->
+                    val buffer = ByteArray(65536)
+                    var count = input.read(buffer)
+                    while (count != -1) {
+                        digest.update(buffer, 0, count)
+                        count = input.read(buffer)
+                    }
+                }
+                promise.resolve(digest.digest().joinToString("") { "%02x".format(it.toInt() and 255) })
+            } catch (e: Exception) {
+                promise.reject("SHA256_ERROR", e.message, e)
+            }
+        }.start()
+    }
+
+    @ReactMethod
     fun installApk(apkPath: String, promise: Promise) {
         Thread {
             try {

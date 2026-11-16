@@ -1,0 +1,1 @@
+ALTER TABLE "Video" ADD COLUMN "hash_sha256" TEXT;

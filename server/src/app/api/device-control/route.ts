@@ -3,18 +3,18 @@ import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 import { prisma } from "@/lib/prisma";
 import { errorMessage } from "@/lib/errors";
+import { authenticateDevice } from "@/lib/deviceAuth";
+import { enforceRateLimit, opaqueRateKey, readJsonBody, requestErrorResponse } from "@/lib/requestGuards";
 
-async function authorizedDevice(token: string) {
-  return prisma.device.findFirst({
-    where: { id: token, revoked_at: null, installation_id: { not: null } },
-  });
-}
+type DeviceControlBody = { token?: unknown; action?: unknown; imageBase64?: unknown; error?: unknown };
 
 export async function POST(req: NextRequest) {
   try {
-    const { token, action, imageBase64, error } = await req.json();
+    const { token, action, imageBase64, error } = await readJsonBody<DeviceControlBody>(req, 12 * 1024 * 1024);
     if (!token || !action) return NextResponse.json({ error: "Datos incompletos" }, { status: 400 });
-    const device = await authorizedDevice(String(token));
+    const limited = enforceRateLimit(req, "device-control", opaqueRateKey(token), 30, 60 * 1000);
+    if (limited) return limited;
+    const device = await authenticateDevice(token);
     if (!device) return NextResponse.json({ error: "DEVICE_REVOKED" }, { status: 401 });
 
     if (action === "screenshot") {
@@ -47,6 +47,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ error: "Acción desconocida" }, { status: 400 });
   } catch (error: unknown) {
+    const requestError = requestErrorResponse(error);
+    if (requestError) return requestError;
     console.error("DEVICE CONTROL ERROR:", errorMessage(error));
     return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }

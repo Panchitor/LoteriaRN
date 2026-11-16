@@ -80,7 +80,7 @@ export async function unlinkDevice(deviceId: string) {
   await requireAdmin();
   await prisma.device.update({
     where: { id: deviceId },
-    data: { installation_id: null, revoked_at: new Date(), status: "offline" },
+    data: { installation_id: null, api_token_hash: null, revoked_at: new Date(), status: "offline" },
   });
   await prisma.deviceActivationCode.updateMany({
     where: { device_id: deviceId, used_at: null },

@@ -95,6 +95,7 @@ model Video {
   size_bytes    BigInt
   duration_sec  Int
   hash_md5      String
+  hash_sha256   String?
   created_at    DateTime @default(now())
 
   // New fields

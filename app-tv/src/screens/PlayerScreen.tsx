@@ -32,6 +32,8 @@ interface TickerItem {
 interface ManifestVideo {
   filename: string;
   original_name: string;
+  size_bytes?: number;
+  hash_sha256?: string | null;
   media_type?: 'video' | 'image';
   display_duration?: number;
 }
@@ -208,8 +210,12 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
     sendRemoteLog('info', `TV iniciado v${currentAppVersion}`);
   }, []);
 
-  const downloadAndInstallUpdate = async (apkUrl: string, newVersion: string) => {
+  const downloadAndInstallUpdate = async (apkUrl: string, newVersion: string, expectedSha256?: string | null) => {
     if (updateInProgressRef.current || lastAttemptedUpdateRef.current === newVersion) return;
+    if (!expectedSha256 || !/^[0-9a-f]{64}$/i.test(expectedSha256)) {
+      sendRemoteLog('error', `Actualización OTA v${newVersion} rechazada: falta SHA-256 válido`);
+      return;
+    }
     updateInProgressRef.current = true;
     lastAttemptedUpdateRef.current = newVersion;
     updateProgressRef.current = 0;
@@ -246,6 +252,13 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
       if (!downloadResult || downloadResult.status !== 200) throw new Error("Falló la descarga de la APK");
       const { uri } = downloadResult;
       const cleanPath = uri.replace('file://', '');
+      if (!SilentInstall?.sha256File) throw new Error('El dispositivo no puede verificar SHA-256 de la actualización');
+      const actualSha256 = await SilentInstall.sha256File(cleanPath);
+      if (typeof actualSha256 !== 'string' || actualSha256.toLowerCase() !== expectedSha256.toLowerCase()) {
+        await FileSystem.deleteAsync(fileUri, { idempotent: true });
+        throw new Error('La firma de integridad SHA-256 de la APK no coincide');
+      }
+      sendRemoteLog('info', `APK v${newVersion} verificada por SHA-256`);
       setUpdateStatusText(`Descarga completada (v${newVersion}). Aplicando actualización en segundo plano (su / pm)...`);
 
       try {
@@ -319,12 +332,38 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
 
       for (const video of manifestVideos) {
         const fileUri = VIDEO_DIR + video.filename;
-        const fileInfo = await FileSystem.getInfoAsync(fileUri);
+        let fileInfo = await FileSystem.getInfoAsync(fileUri);
+
+        const isValidFile = async (uri: string, size?: number, sha256?: string | null) => {
+          const info = await FileSystem.getInfoAsync(uri);
+          if (!info.exists) return false;
+          if (size && 'size' in info && info.size !== size) return false;
+          if (sha256 && SilentInstall?.sha256File) {
+            const actualHash = await SilentInstall.sha256File(uri);
+            return typeof actualHash === 'string' && actualHash.toLowerCase() === sha256.toLowerCase();
+          }
+          return true;
+        };
+
+        if (fileInfo.exists && !(await isValidFile(fileUri, video.size_bytes, video.hash_sha256))) {
+          await FileSystem.deleteAsync(fileUri, { idempotent: true });
+          delete newLocalFiles[video.filename];
+          fileInfo = await FileSystem.getInfoAsync(fileUri);
+          hasChanges = true;
+          sendRemoteLog('warn', `Contenido local inválido descartado: ${video.filename}`);
+        }
         
         if (!fileInfo.exists) {
            sendRemoteLog('info', `Descargando contenido: ${video.filename}`);
            const remoteUrl = await getApiUrl(source, `/api/videos/${encodeURIComponent(video.filename)}`);
-           await FileSystem.downloadAsync(remoteUrl, fileUri);
+           const temporaryUri = `${fileUri}.download`;
+           await FileSystem.deleteAsync(temporaryUri, { idempotent: true });
+           await FileSystem.downloadAsync(remoteUrl, temporaryUri);
+           if (!(await isValidFile(temporaryUri, video.size_bytes, video.hash_sha256))) {
+             await FileSystem.deleteAsync(temporaryUri, { idempotent: true });
+             throw new Error(`Verificación SHA-256/tamaño fallida para ${video.filename}`);
+           }
+           await FileSystem.moveAsync({ from: temporaryUri, to: fileUri });
            newLocalFiles[video.filename] = fileUri;
            hasChanges = true;
         } else if (!newLocalFiles[video.filename]) {
@@ -469,8 +508,8 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
           }
 
           if (dataLive.latestApkVersion && isVersionNewer(dataLive.latestApkVersion, currentAppVersion)) {
-            if (dataLive.latestApkUrl && lastAttemptedUpdateRef.current !== dataLive.latestApkVersion) {
-               downloadAndInstallUpdate(dataLive.latestApkUrl, dataLive.latestApkVersion);
+            if (dataLive.latestApkUrl && dataLive.latestApkSha256 && lastAttemptedUpdateRef.current !== dataLive.latestApkVersion) {
+               downloadAndInstallUpdate(dataLive.latestApkUrl, dataLive.latestApkVersion, dataLive.latestApkSha256);
                return; // PAUSA OTRAS DESCARGAS MIENTRAS SE ACTUALIZA EL APK
             }
           }

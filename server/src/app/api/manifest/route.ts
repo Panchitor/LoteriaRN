@@ -40,7 +40,6 @@ export async function GET() {
       tickers: parsedTickers
     }, {
       headers: {
-        'Access-Control-Allow-Origin': '*',
         'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
         'Pragma': 'no-cache',
         'Expires': '0',
@@ -48,6 +47,6 @@ export async function GET() {
     });
 
   } catch {
-    return NextResponse.json({ error: "Internal Error" }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
+    return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
 }

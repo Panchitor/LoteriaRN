@@ -24,6 +24,12 @@ const eslintConfig = defineConfig([
       "react-hooks/purity": "off",
     },
   },
+  {
+    files: ["tests/**/*.cjs"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

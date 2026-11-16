@@ -6,8 +6,10 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start -H 127.0.0.1 -p 3008",
-    "check": "tsc --noEmit && next build --webpack",
-    "lint": "eslint ."
+    "check": "npm run lint && npm test && tsc --noEmit && next build --webpack",
+    "lint": "eslint .",
+    "test": "node --test tests/*.test.cjs",
+    "backfill:media-sha256": "node scripts/backfill-media-sha256.mjs"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",

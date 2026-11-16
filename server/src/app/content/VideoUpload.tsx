@@ -203,6 +203,7 @@ interface SortableVideo {
   media_type: string;
   size_bytes: bigint;
   hash_md5: string;
+  hash_sha256: string | null;
   created_at: Date;
   filename: string;
   display_duration: number;
@@ -262,7 +263,7 @@ export function ReorderableTable({ videos }: { videos: SortableVideo[] }) {
             <th className="px-3 py-4 text-xs font-semibold text-muted uppercase tracking-wider w-16">Tipo</th>
             <th className="px-6 py-4 text-xs font-semibold text-muted uppercase tracking-wider">Archivo</th>
             <th className="px-6 py-4 text-xs font-semibold text-muted uppercase tracking-wider">Tamaño</th>
-            <th className="px-6 py-4 text-xs font-semibold text-muted uppercase tracking-wider">Hash (MD5)</th>
+            <th className="px-6 py-4 text-xs font-semibold text-muted uppercase tracking-wider">Integridad</th>
             <th className="px-6 py-4 text-xs font-semibold text-muted uppercase tracking-wider">Fecha</th>
             <th className="px-6 py-4 text-xs font-semibold text-muted uppercase tracking-wider text-right">Acciones</th>
           </tr>
@@ -308,7 +309,7 @@ export function ReorderableTable({ videos }: { videos: SortableVideo[] }) {
                 <td className="px-6 py-4 text-sm text-muted">
                   {(Number(video.size_bytes) / (1024 * 1024)).toFixed(1)} MB
                 </td>
-                <td className="px-6 py-4 text-xs font-mono text-muted/60">{video.hash_md5.substring(0,16)}...</td>
+                <td className="px-6 py-4 text-xs font-mono text-muted/60">{(video.hash_sha256 || video.hash_md5).substring(0,16)}...</td>
                 <td className="px-6 py-4 text-sm text-muted">
                   {new Date(video.created_at).toLocaleDateString('es-AR')}
                 </td>

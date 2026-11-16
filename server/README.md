@@ -11,6 +11,8 @@ contenido institucional, transmisiones en vivo, alertas, telemetría y actualiza
 - Variables `DATABASE_URL` y `JWT_SECRET` en `.env`
 
 `JWT_SECRET` es obligatorio cuando `NODE_ENV=production`.
+El alta antigua por número de agencia está deshabilitada en producción; sólo puede habilitarse
+temporalmente con `ALLOW_LEGACY_DEVICE_REGISTRATION=true` durante una migración controlada.
 
 ## Desarrollo
 
@@ -26,11 +28,18 @@ El servidor de producción escucha en el puerto `3008`.
 ## Validación
 
 ```sh
-npm run lint
-npm run build
+npm run check
 ```
 
 La aplicación Android se valida desde `../app-tv` con `npm run check`.
+
+Después de agregar la columna SHA-256, los medios históricos se auditan primero en seco y
+se actualizan únicamente con confirmación explícita:
+
+```sh
+npm run backfill:media-sha256
+npm run backfill:media-sha256 -- --apply
+```
 
 ## Producción
 
