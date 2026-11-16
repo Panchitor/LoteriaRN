@@ -50,7 +50,7 @@ jobs:
           java-version: 17
           cache: gradle
       - run: npm ci
-      - run: npx tsc --noEmit
+      - run: npm run check
       - name: Generate disposable CI signing key
         run: |
           rm -f android/app/debug.keystore
