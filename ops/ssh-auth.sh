@@ -2,7 +2,14 @@
 # This file is sourced by the scripts in this directory.
 LOTERIA_HOST="${LOTERIA_HOST:-root@149.50.139.29}"
 LOTERIA_PORT="${LOTERIA_PORT:-5753}"
-LOTERIA_SSH_KEY="${LOTERIA_SSH_KEY:-$HOME/.ssh/loteria_deploy_ed25519}"
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PROJECT_KEY="$SCRIPT_DIR/../.secrets/loteria_deploy_ed25519"
+if [ -f "$PROJECT_KEY" ]; then
+  DEFAULT_LOTERIA_SSH_KEY="$PROJECT_KEY"
+else
+  DEFAULT_LOTERIA_SSH_KEY="$HOME/.ssh/loteria_deploy_ed25519"
+fi
+LOTERIA_SSH_KEY="${LOTERIA_SSH_KEY:-$DEFAULT_LOTERIA_SSH_KEY}"
 
 remote_ssh() {
   if [ -f "$LOTERIA_SSH_KEY" ]; then

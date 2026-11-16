@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Lotería RN — servidor de cartelería
 
-## Getting Started
+Panel administrativo y API central para administrar agencias, terminales Android TV,
+contenido institucional, transmisiones en vivo, alertas, telemetría y actualizaciones OTA.
 
-First, run the development server:
+## Requisitos
 
-```bash
+- Node.js 20
+- PostgreSQL 15 o superior
+- FFmpeg
+- Variables `DATABASE_URL` y `JWT_SECRET` en `.env`
+
+`JWT_SECRET` es obligatorio cuando `NODE_ENV=production`.
+
+## Desarrollo
+
+```sh
+npm ci
+npx prisma generate
+npx prisma migrate deploy
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+El servidor de producción escucha en el puerto `3008`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Validación
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```sh
+npm run lint
+npm run build
+```
 
-## Learn More
+La aplicación Android se valida desde `../app-tv` con `npm run check`.
 
-To learn more about Next.js, take a look at the following resources:
+## Producción
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Los procedimientos operativos se encuentran en `../ops`:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `deploy-production.sh`: backup, despliegue, migraciones, build y smoke tests.
+- `verify-production.sh`: estado de PM2 y últimas terminales activas.
+- `audit-production-security.sh`: configuración y roles de base de datos.
+- `backup-production.sh` y `verify-backup.sh`: creación y restauración de prueba.
+- `restore-production.sh`: recuperación controlada.
 
-## Deploy on Vercel
+El procedimiento completo está en
+[`../docs/DISASTER_RECOVERY.md`](../docs/DISASTER_RECOVERY.md).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+No se deben versionar `.env`, claves de firma, backups, APK, medios, datos de
+PostgreSQL ni resultados de compilación.

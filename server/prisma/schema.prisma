@@ -38,6 +38,7 @@ model Device {
   android_version   String?
   device_model      String?
   device_serial     String?
+  asset_label       String?   @unique
   status            String    @default("offline")
   is_active         Boolean   @default(true)
   last_seen         DateTime  @default(now())

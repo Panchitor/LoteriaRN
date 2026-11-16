@@ -136,7 +136,7 @@ export default async function DashboardPage() {
                 <tr key={device.id} className="text-sm hover:bg-primary/[0.03]">
                   <td className="py-4 font-semibold"><Link href={`/monitoring/${device.id}`} className="text-white hover:text-primary hover:underline">Ag. {device.agency.number}{device.agency.subagency_number ? ` / Sub. ${device.agency.subagency_number}` : ""} · TV {device.tv_number || "?"}</Link></td>
                   <td><Link href={`/monitoring/${device.id}`} className="text-muted hover:text-white hover:underline">{device.agency.city || "Sin ciudad"}</Link></td>
-                  <td className="capitalize"><Link href={`/monitoring/${device.id}`} className="text-muted hover:text-white hover:underline">{device.playback_status === "offline" ? "Contenido local" : device.playback_status || "Sin datos"}</Link></td>
+                  <td className="capitalize"><Link href={`/monitoring/${device.id}`} className="text-muted hover:text-white hover:underline">{device.playback_status === "live" ? "Vivo" : ["offline", "playing"].includes(device.playback_status || "") ? "Videos" : device.playback_status === "error" ? "Error" : "Sin datos"}</Link></td>
                   <td><Link href="/updates" className={`${device.app_version === latestVersion ? "text-primary" : "text-amber-300"} hover:underline`}>{device.app_version || "—"}</Link></td>
                   <td className="text-muted">{device.free_space !== null ? `${(Number(device.free_space) / GB).toFixed(1)} GB` : "—"}</td>
                   <td className="text-muted">{formatElapsed(device.ageSeconds)}</td>

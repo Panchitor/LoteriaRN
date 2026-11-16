@@ -6,6 +6,7 @@ import { fetchWithFailover, saveServerUrls } from '../services/apiClient';
 
 export default function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
   const [activationCode, setActivationCode] = useState('');
+  const [assetLabel, setAssetLabel] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [installationId, setInstallationId] = useState('');
@@ -42,6 +43,10 @@ export default function LoginScreen({ onLogin }: { onLogin: (token: string) => v
       return;
     }
 
+    if (!/^[A-Z0-9][A-Z0-9_-]{2,39}$/.test(assetLabel.trim().toUpperCase())) {
+      setError('Ingrese el ID pegado en el equipo (3–40 letras, números o guiones)');
+      return;
+    }
     setLoading(true);
     setError(null);
 
@@ -49,7 +54,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (token: string) => v
       const res = await fetchWithFailover('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ activationCode, installationId })
+        body: JSON.stringify({ activationCode, installationId, assetLabel: assetLabel.trim().toUpperCase() })
       });
 
       const data = await res.json();
@@ -71,7 +76,8 @@ export default function LoginScreen({ onLogin }: { onLogin: (token: string) => v
 
   const isWifiFocused = focusedIndex === 0;
   const isInputFocused = focusedIndex === 1;
-  const isSubmitFocused = focusedIndex === 2;
+  const isLabelFocused = focusedIndex === 2;
+  const isSubmitFocused = focusedIndex === 3;
 
   return (
     <View style={styles.container}>
@@ -124,14 +130,21 @@ export default function LoginScreen({ onLogin }: { onLogin: (token: string) => v
           />
         </View>
 
+        <View style={[styles.inputContainer, isLabelFocused && styles.focusedInputContainer]}>
+          <Text style={[styles.label, isLabelFocused && styles.focusedLabel]}>ID de etiqueta del equipo · obligatorio</Text>
+          <TextInput style={[styles.input, isLabelFocused && styles.focusedInput]} value={assetLabel}
+            onChangeText={value => setAssetLabel(value.toUpperCase())} maxLength={40} autoCapitalize="characters" autoCorrect={false}
+            onFocus={() => setFocusedIndex(2)} onBlur={() => setFocusedIndex(-1)}
+            placeholder="Ej: LRN-000123" placeholderTextColor="#64748b" />
+        </View>
         {error && <Text style={styles.errorText}>{error}</Text>}
 
         {/* 3. BOTON VINCULAR PANTALLA */}
         <Pressable 
           focusable={true}
-          onFocus={() => setFocusedIndex(2)}
+          onFocus={() => setFocusedIndex(3)}
           onBlur={() => setFocusedIndex(-1)}
-          onPressIn={() => setFocusedIndex(2)}
+          onPressIn={() => setFocusedIndex(3)}
           style={() => [
             styles.button,
             isSubmitFocused && styles.focusedSubmitButton
@@ -167,7 +180,7 @@ const styles = StyleSheet.create({
     width: '92%',
     maxWidth: 750,
     backgroundColor: '#1e293b',
-    padding: 40,
+    padding: 20,
     borderRadius: 16,
     alignItems: 'center',
     borderWidth: 1,
@@ -179,8 +192,8 @@ const styles = StyleSheet.create({
   },
   logoImage: {
     width: '95%',
-    height: 160,
-    marginBottom: 20,
+    height: 70,
+    marginBottom: 10,
   },
   title: {
     fontSize: 24,

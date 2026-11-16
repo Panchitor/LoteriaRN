@@ -2,6 +2,13 @@ package com.loteriarn.agencias
 
 import android.os.Build
 import android.os.Bundle
+import android.content.Intent
+import android.media.AudioManager
+import android.util.Log
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
+import kotlin.math.roundToInt
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -17,6 +24,36 @@ class MainActivity : ReactActivity() {
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme);
     super.onCreate(null)
+    try {
+      val audio = getSystemService(AUDIO_SERVICE) as AudioManager
+      val target = (audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC) * 0.8).roundToInt()
+      audio.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
+      Log.i("LoteriaSetup", "Media volume=${audio.getStreamVolume(AudioManager.STREAM_MUSIC)}/$target fixed=${audio.isVolumeFixed}")
+    } catch (error: Exception) {
+      Log.w("LoteriaSetup", "No se pudo establecer el volumen multimedia", error)
+    }
+  }
+
+  override fun onPostResume() {
+    super.onPostResume()
+    val prefs = getSharedPreferences("launcher_setup", MODE_PRIVATE)
+    if (prefs.getBoolean("shortcut_requested", false)) return
+    try {
+      if (!ShortcutManagerCompat.isRequestPinShortcutSupported(this)) return
+      val shortcut = ShortcutInfoCompat.Builder(this, "loteria_tv_home")
+        .setShortLabel(getString(R.string.app_name))
+        .setIcon(IconCompat.createWithResource(this, R.mipmap.ic_launcher))
+        .setIntent(Intent(this, MainActivity::class.java).apply {
+          action = Intent.ACTION_VIEW
+          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        })
+        .build()
+      if (ShortcutManagerCompat.requestPinShortcut(this, shortcut, null)) {
+        prefs.edit().putBoolean("shortcut_requested", true).apply()
+      }
+    } catch (error: Exception) {
+      Log.w("LoteriaSetup", "El launcher no permite agregar el acceso directo", error)
+    }
   }
 
   /**

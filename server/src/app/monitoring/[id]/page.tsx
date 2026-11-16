@@ -95,8 +95,12 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ id:
                <span className="text-right text-white font-mono">{device.device_model || 'No reportado'}</span>
             </div>
             <div className="flex justify-between gap-4 border-b border-[#374151] pb-2">
-               <span className="text-muted">Serie / ID físico:</span>
+               <span className="text-muted">Serie informada por firmware:</span>
                <span className="max-w-[65%] break-all text-right text-white font-mono">{device.device_serial || 'No reportado'}</span>
+            </div>
+            <div className="flex justify-between border-b border-[#374151] pb-4">
+               <span className="text-muted">ID de etiqueta del equipo:</span>
+               <span className="max-w-[65%] break-all text-right text-primary font-mono font-bold">{device.asset_label || 'Sin asignar'}</span>
             </div>
             <div className="flex justify-between border-b border-[#374151] pb-2">
                <span className="text-muted">Almacenamiento Libre:</span>
@@ -123,7 +127,7 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ id:
                ) : (
                  <div className="flex flex-col items-center text-[#32d74b]">
                     <MonitorPlay className="h-12 w-12 mb-2" />
-                    <span className="font-bold uppercase tracking-widest">{device.playback_status || 'DESCONOCIDO'}</span>
+                    <span className="font-bold uppercase tracking-widest">{device.playback_status === 'live' ? 'Vivo' : ['offline', 'playing'].includes(device.playback_status || '') ? 'Videos' : 'Sin datos'}</span>
                  </div>
                )}
             </div>
@@ -159,7 +163,7 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ id:
           <h3 className="text-sm font-bold text-muted uppercase tracking-widest mb-4">Última captura remota</h3>
           {device.last_screenshot ? (
             <div>
-              <img src={`${device.last_screenshot}?v=${device.screenshot_at?.getTime() || 0}`} alt={`Captura de Agencia ${device.agency.number}`} className="w-full rounded border border-[#374151] bg-black object-contain" />
+              <img src={`/api/screenshots/${device.id}?v=${device.screenshot_at?.getTime() || 0}`} alt={`Captura de Agencia ${device.agency.number}`} className="w-full rounded border border-[#374151] bg-black object-contain" />
               <p className="mt-3 text-xs text-muted">Capturada: {device.screenshot_at?.toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })}</p>
             </div>
           ) : <div className="grid min-h-52 place-items-center rounded border border-dashed border-[#374151] text-sm text-muted">Todavía no hay capturas de este dispositivo.</div>}

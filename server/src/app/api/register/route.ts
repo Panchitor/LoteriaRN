@@ -3,7 +3,11 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
   try {
-    const { activationCode, agencyNumber, subagencyNumber, tvNumber, installationId } = await req.json();
+    const { activationCode, agencyNumber, subagencyNumber, tvNumber, installationId, assetLabel } = await req.json();
+    const label = assetLabel == null ? undefined : String(assetLabel).trim().toUpperCase();
+    if (label !== undefined && !/^[A-Z0-9][A-Z0-9_-]{2,39}$/.test(label)) {
+      return NextResponse.json({ error: "El ID de etiqueta debe tener entre 3 y 40 letras, números, guiones o guiones bajos." }, { status: 400 });
+    }
 
     if (!installationId) {
       return NextResponse.json({ error: "Falta la identificación del dispositivo." }, { status: 400 });
@@ -34,7 +38,7 @@ export async function POST(req: NextRequest) {
         if (consumed.count !== 1) throw new Error("ACTIVATION_ALREADY_USED");
         return tx.device.update({
           where: { id: activation.device_id },
-          data: { installation_id: String(installationId), revoked_at: null, status: "online" },
+          data: { installation_id: String(installationId), revoked_at: null, status: "online", asset_label: label },
           include: { agency: true },
         });
       });
@@ -97,6 +101,7 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (err: any) {
+    if (err.code === 'P2002') return NextResponse.json({ error: "Ese ID de etiqueta o instalación ya está asignado a otro dispositivo. Revise el registro antes de vincular." }, { status: 409 });
     console.error("Register Error:", err);
     return NextResponse.json({ error: "Error interno del servidor." }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
   }

@@ -21,6 +21,8 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import com.facebook.react.bridge.Arguments
+import java.security.MessageDigest
+import java.util.zip.ZipFile
 
 class SilentInstallModule(private val reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
@@ -124,6 +126,16 @@ class SilentInstallModule(private val reactContext: ReactApplicationContext) : R
     }
 
     @ReactMethod
+    fun getInstallStatus(promise: Promise) {
+        val info = Arguments.createMap()
+        @Suppress("DEPRECATION")
+        val installed = reactContext.packageManager.getPackageInfo(reactContext.packageName, 0)
+        info.putString("version", installed.versionName)
+        info.putString("result", reactContext.getSharedPreferences("ota", 0).getString("result", "WAITING"))
+        promise.resolve(info)
+    }
+
+    @ReactMethod
     fun installApk(apkPath: String, promise: Promise) {
         Thread {
             try {
@@ -133,22 +145,50 @@ class SilentInstallModule(private val reactContext: ReactApplicationContext) : R
                     return@Thread
                 }
 
+                fun sha256(stream: java.io.InputStream): String = stream.use { input ->
+                    val digest = MessageDigest.getInstance("SHA-256")
+                    val buffer = ByteArray(65536)
+                    var count = input.read(buffer)
+                    while (count != -1) {
+                        digest.update(buffer, 0, count)
+                        count = input.read(buffer)
+                    }
+                    digest.digest().joinToString("") { "%02x".format(it.toInt() and 255) }
+                }
+                val sourceHash = sha256(FileInputStream(sourceFile))
+                android.util.Log.i("LoteriaOTA", "Downloaded APK bytes=${sourceFile.length()} sha256=$sourceHash")
+                ZipFile(sourceFile).use { zip ->
+                    require(zip.getEntry("AndroidManifest.xml") != null) { "APK descargada sin AndroidManifest.xml; bytes=${sourceFile.length()} sha256=$sourceHash" }
+                }
+                @Suppress("DEPRECATION")
+                val archive = reactContext.packageManager.getPackageArchiveInfo(sourceFile.absolutePath, 0)
+                    ?: throw IllegalArgumentException("Android no puede analizar la APK descargada; bytes=${sourceFile.length()} sha256=$sourceHash")
+                require(archive.packageName == reactContext.packageName) { "La APK pertenece a otro paquete: ${archive.packageName}" }
+
                 // 1. Intentar instalación usando la API nativa PackageInstaller (apps de /system/priv-app)
                 try {
+                    reactContext.getSharedPreferences("ota", 0).edit().putString("result", "WAITING").apply()
                     val packageInstaller = reactContext.packageManager.packageInstaller
                     val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+                    params.setAppPackageName(reactContext.packageName)
+                    params.setSize(sourceFile.length())
                     val sessionId = packageInstaller.createSession(params)
                     val session = packageInstaller.openSession(sessionId)
 
-                    val out = session.openWrite("update_session", 0, sourceFile.length())
+                    val out = session.openWrite("base.apk", 0, sourceFile.length())
                     val input = FileInputStream(sourceFile)
-                    input.copyTo(out)
+                    val copiedBytes = input.copyTo(out)
                     session.fsync(out)
                     input.close()
                     out.close()
 
+                    require(copiedBytes == sourceFile.length()) { "Copia incompleta a Android: $copiedBytes/${sourceFile.length()} bytes" }
+                    val sessionHash = sha256(session.openRead("base.apk"))
+                    require(sessionHash == sourceHash) { "APK alterada en sesión $sessionId: origen=$sourceHash sesión=$sessionHash" }
+                    android.util.Log.i("LoteriaOTA", "Verified session=$sessionId bytes=$copiedBytes sha256=$sessionHash version=${archive.versionName}")
+
                     val intent = Intent(reactContext, BootReceiver::class.java)
-                    intent.action = "android.intent.action.MY_PACKAGE_REPLACED"
+                    intent.action = "com.loteriarn.agencias.INSTALL_RESULT"
                     val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
                     } else {
@@ -158,9 +198,11 @@ class SilentInstallModule(private val reactContext: ReactApplicationContext) : R
 
                     session.commit(pendingIntent.intentSender)
                     session.close()
-                    promise.resolve("SUCCESS_NATIVE_PACKAGE_INSTALLER")
+                    promise.resolve("INSTALL_REQUESTED session=$sessionId bytes=$copiedBytes sha256=$sessionHash version=${archive.versionName}")
                     return@Thread
                 } catch (nativeErr: Exception) {
+                    promise.reject("SESSION_ERROR", "Falló la sesión Android: ${nativeErr.message}; bytes=${sourceFile.length()} sha256=$sourceHash", nativeErr)
+                    return@Thread
                     // Fallback a Root (su) si no tiene privilegios PackageInstaller directos
                 }
 

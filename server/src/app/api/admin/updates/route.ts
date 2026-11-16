@@ -36,10 +36,12 @@ export async function POST(req: NextRequest) {
     const uploadDir = join(process.cwd(), "public", "apk");
     fs.mkdirSync(uploadDir, { recursive: true });
     await writeFile(join(uploadDir, filename), Buffer.from(await file.arrayBuffer()));
-    const origin = new URL(req.url).origin;
+    // Next runs behind the proxy on localhost:3008; devices need the public origin.
+    const origin = new URL(process.env.PUBLIC_APP_URL || 'https://loteriarn.patagonialive.media').origin;
     const url = `${origin}/apk/${filename}`;
     const prefix = channel === 'PILOT' ? 'PILOT' : 'LATEST';
     await prisma.$transaction([
+      ...(channel === 'PILOT' ? [prisma.device.updateMany({ where: { update_channel: 'PILOT' }, data: { update_channel: 'STABLE' } })] : []),
       prisma.systemConfig.upsert({ where: { key: `${prefix}_APK_VERSION` }, update: { value: version }, create: { key: `${prefix}_APK_VERSION`, value: version } }),
       prisma.systemConfig.upsert({ where: { key: `${prefix}_APK_URL` }, update: { value: url }, create: { key: `${prefix}_APK_URL`, value: url } }),
     ]);

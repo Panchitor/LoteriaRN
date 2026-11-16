@@ -1,0 +1,12 @@
+[Unit]
+Description=Synchronize Loteria RN primary data to read-only standby
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/loteria/standby-sync.env
+ExecStart=/var/www/loteria/ops/sync-standby.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6

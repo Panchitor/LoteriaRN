@@ -9,7 +9,9 @@ import * as Network from 'expo-network';
 import { WebView } from 'react-native-webview';
 
 import { MarqueeTicker } from '../components/MarqueeTicker';
-import { fetchWithFailover, getPrimaryApiUrl, saveServerUrls } from '../services/apiClient';
+import { fetchReadWithFailover, fetchWithFailover, getApiUrl, getPrimaryApiUrl, saveServerUrls } from '../services/apiClient';
+import { hasLiveProgress } from '../utils/liveProgress';
+import { MAINTENANCE_NOTICE, type ServerSource } from '../utils/failoverPolicy';
 
 const { SilentInstall } = NativeModules;
 const VIDEO_DIR = FileSystem.documentDirectory + 'videos/';
@@ -76,6 +78,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
   const [isDownloadingVideos, setIsDownloadingVideos] = useState(false);
   const [pollIntervalMs, setPollIntervalMs] = useState(10000);
   const [networkState, setNetworkState] = useState<Network.NetworkState | null>(null);
+  const [serverSource, setServerSource] = useState<ServerSource>('primary');
   
   const [liveRetryKey, setLiveRetryKey] = useState(0);
   const [offlineRetryKey, setOfflineRetryKey] = useState(0);
@@ -219,7 +222,8 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
       
       let finalUrl = apkUrl;
       if (finalUrl.includes('localhost')) {
-        finalUrl = await getPrimaryApiUrl(finalUrl.replace('http://localhost:3000', ''));
+        const parsedUrl = new URL(finalUrl);
+        finalUrl = await getPrimaryApiUrl(parsedUrl.pathname + parsedUrl.search);
       }
       
       const fileUri = FileSystem.documentDirectory + 'update.apk';
@@ -239,7 +243,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
       );
 
       const downloadResult = await downloadResumable.downloadAsync();
-      if (!downloadResult) throw new Error("Fallo la descarga de la APK");
+      if (!downloadResult || downloadResult.status !== 200) throw new Error("Falló la descarga de la APK");
       const { uri } = downloadResult;
       const cleanPath = uri.replace('file://', '');
       setUpdateStatusText(`Descarga completada (v${newVersion}). Aplicando actualización en segundo plano (su / pm)...`);
@@ -247,17 +251,32 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
       try {
         if (SilentInstall && SilentInstall.installApk) {
           const res = await SilentInstall.installApk(cleanPath);
-          sendRemoteLog('info', `Instalación silenciosa ejecutada con éxito (${res})`);
-          setUpdateStatusText(`Instalando actualización v${newVersion}. No apagar el equipo; la aplicación se reiniciará automáticamente.`);
+          sendRemoteLog('info', `Solicitud de instalación enviada (${res})`);
+          setUpdateStatusText(`Descarga: 100%. Instalación solicitada a Android. Si aparece una autorización, confirmá Instalar.`);
+          if (SilentInstall.getInstallStatus) {
+            let confirmed = false;
+            for (let attempt = 0; attempt < 60; attempt++) {
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              const status = await SilentInstall.getInstallStatus();
+              if (status.version === newVersion) {
+                confirmed = true;
+                setUpdateStatusText(`Instalación confirmada: v${newVersion}. Reiniciando aplicación...`);
+                await SilentInstall.restartApp();
+                break;
+              }
+              if (status.result?.startsWith('ERROR:')) throw new Error(status.result);
+              setUpdateStatusText(`Descarga: 100%. ${status.result === 'WAITING_USER' ? 'Android espera que confirmes Instalar.' : 'Esperando confirmación de instalación.'} ${(attempt + 1) * 2}s / 120s`);
+            }
+            if (!confirmed) throw new Error('Android no confirmó la actualización en 120 segundos. Revise permisos de instalación o instale la APK manualmente.');
+          }
         } else {
           throw new Error("Módulo de instalación silenciosa no registrado");
         }
       } catch (silentErr: any) {
-        sendRemoteLog('warn', `Instalación silenciosa en reintento: ${silentErr?.message}`);
+        sendRemoteLog('error', `Instalación OTA detenida: ${silentErr?.message}`);
         setUpdateStatusText(`DETALLE ERROR (v${newVersion}): ${silentErr?.message || silentErr}`);
         setTimeout(() => {
           updateInProgressRef.current = false;
-          lastAttemptedUpdateRef.current = null;
           setIsUpdating(false);
         }, 10000);
       }
@@ -272,14 +291,13 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
       sendRemoteLog('error', `Error en instalación OTA: ${e?.message}`);
       setUpdateStatusText(`Error al actualizar: ${e?.message || 'Error desconocido'}`);
       updateInProgressRef.current = false;
-      lastAttemptedUpdateRef.current = null;
       setTimeout(() => {
         setIsUpdating(false);
       }, 5000);
     }
   };
 
-  const syncVideos = async (manifestVideos: ManifestVideo[]) => {
+  const syncVideos = async (manifestVideos: ManifestVideo[], source: ServerSource = 'primary') => {
     if (isDownloadingVideos || isUpdating) return;
     setIsDownloadingVideos(true);
     let newLocalFiles = { ...localFiles };
@@ -290,7 +308,9 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
       const manifestFilenames = manifestVideos.map(v => v.filename);
       
       for (const file of cachedFiles) {
-        if (!manifestFilenames.includes(file)) {
+        // A standby manifest can be intentionally delayed. Never let it delete
+        // newer content that was already downloaded from the primary server.
+        if (source === 'primary' && !manifestFilenames.includes(file)) {
            await FileSystem.deleteAsync(VIDEO_DIR + file, { idempotent: true });
            delete newLocalFiles[file];
            hasChanges = true;
@@ -303,7 +323,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
         
         if (!fileInfo.exists) {
            sendRemoteLog('info', `Descargando contenido: ${video.filename}`);
-           const remoteUrl = await getPrimaryApiUrl(`/api/videos/${encodeURIComponent(video.filename)}`);
+           const remoteUrl = await getApiUrl(source, `/api/videos/${encodeURIComponent(video.filename)}`);
            await FileSystem.downloadAsync(remoteUrl, fileUri);
            newLocalFiles[video.filename] = fileUri;
            hasChanges = true;
@@ -460,15 +480,17 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
 
         // 2. Fetch manifest if VPS is available
         try {
-          const resManifest = await fetchWithFailover(`/api/manifest?_t=${Date.now()}`);
+          const manifestResult = await fetchReadWithFailover(`/api/manifest?_t=${Date.now()}`);
+          const resManifest = manifestResult.response;
           const dataManifest = await resManifest.json();
           if (isMounted) {
+            setServerSource(manifestResult.source);
             if (dataManifest.tickers) {
                setTickers(dataManifest.tickers);
             }
             if (dataManifest.videos) {
                setPlaylist(dataManifest.videos);
-               syncVideos(dataManifest.videos);
+               syncVideos(dataManifest.videos, manifestResult.source);
             }
           }
         } catch (_) {}
@@ -486,7 +508,10 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
               setLiveStatus({ live: true, url: targetUrl });
             }
           } else {
-            missedLiveCountRef.current = 0;
+            missedLiveCountRef.current += 1;
+            // A failed manifest probe must not interrupt a player still advancing.
+            if (liveStatusRef.current.live && liveStatusRef.current.url === targetUrl &&
+                (Date.now() - liveLastPositionTimeRef.current < 15000 || missedLiveCountRef.current < 3)) return;
             setLiveHasError(false);
             if (liveStatusRef.current.live || liveStatusRef.current.url !== targetUrl) {
               liveStatusRef.current = { live: false, url: targetUrl };
@@ -588,21 +613,15 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
 
   const onLiveVideoStatusUpdate = (status: any) => {
     if (status.isLoaded) {
-      if (status.isBuffering) {
-        // Si se queda cargando/bufferizando más de 20 segundos
-        if (Date.now() - liveLastPositionTimeRef.current > 20000) {
-            sendRemoteLog('warn', `Live stream buffering timeout. Reconectando...`);
-            setLiveRetryKey(prev => prev + 1);
-            liveLastPositionTimeRef.current = Date.now();
-        }
-      } else if (status.isPlaying && Math.abs(status.positionMillis - liveLastPositionRef.current) >= 250) {
+      // Track real progress regardless of isBuffering/isPlaying flags from the firmware.
+      // The watchdog below is the single timeout that recovers a stalled live player.
+      if (hasLiveProgress(liveLastPositionRef.current, status.positionMillis)) {
         liveLastPositionRef.current = status.positionMillis;
         liveLastPositionTimeRef.current = Date.now();
       }
     } else if (status.error) {
        sendRemoteLog('error', `Live stream error: ${status.error}`);
-       setLiveRetryKey(prev => prev + 1);
-       liveLastPositionTimeRef.current = Date.now();
+       setLiveHasError(true);
     }
   };
 
@@ -613,9 +632,12 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
   useEffect(() => {
     lastPositionRef.current = 0;
     lastPositionTimeRef.current = Date.now();
+  }, [currentVideoFilename, liveStatus.live, liveStatus.url]);
+
+  useEffect(() => {
     liveLastPositionRef.current = 0;
     liveLastPositionTimeRef.current = Date.now();
-  }, [currentVideoFilename, liveStatus.live, liveStatus.url]);
+  }, [liveStatus.live, liveStatus.url, liveRetryKey]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -793,6 +815,16 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
           textColor={t.text_color}
         />
       ))}
+
+      {serverSource === 'secondary' && (
+        <MarqueeTicker
+          text={MAINTENANCE_NOTICE}
+          speed={42}
+          position="bottom"
+          bgColor="rgba(180, 83, 9, 0.96)"
+          textColor="#FFFFFF"
+        />
+      )}
       
       {/* NO INTERNET / NO NETWORK OVERLAY (CORNER WIDGET) */}
       {networkState && (!networkState.isConnected || !networkState.isInternetReachable) && (

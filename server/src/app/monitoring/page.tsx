@@ -110,6 +110,7 @@ export default async function MonitoringPage() {
                 <div className="flex justify-between items-start w-full">
                    <div className="text-xl font-black tracking-tight">
                      AG {device.agency.number}
+                     <div className="text-xs font-mono break-all">{device.asset_label || 'Sin etiqueta'}</div>
                    </div>
                    {device.operationalState === "online" ? (
                      <div className="w-2 h-2 rounded-full bg-[#32d74b] animate-pulse shadow-[0_0_5px_rgba(50,215,75,0.8)]"></div>

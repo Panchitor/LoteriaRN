@@ -1,0 +1,11 @@
+[Unit]
+Description=Synchronize Loteria RN standby every 30 minutes
+
+[Timer]
+OnCalendar=*:0/30
+Persistent=true
+RandomizedDelaySec=90
+Unit=loteria-standby-sync.service
+
+[Install]
+WantedBy=timers.target
