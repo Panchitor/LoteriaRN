@@ -10,7 +10,6 @@ export default async function ContentPage() {
     orderBy: [{ order: "asc" }, { created_at: "asc" }],
   });
 
-  const versionHash = videos.reduce((acc, v) => acc + v.created_at.getTime(), videos.length);
   const manifestDisplay = videos.length > 0
     ? new Intl.DateTimeFormat('es-AR', {
         day: '2-digit', month: '2-digit', year: '2-digit',

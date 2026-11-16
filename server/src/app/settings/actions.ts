@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/authorization";
+import { errorMessage } from "@/lib/errors";
 
 export async function saveConfigs(configs: { key: string; value: string }[]) {
   await requireAdmin();
@@ -18,8 +19,8 @@ export async function saveConfigs(configs: { key: string; value: string }[]) {
     }
     revalidatePath("/settings");
     return { success: true };
-  } catch (error) {
-    console.error("Error saving configs:", error);
+  } catch (error: unknown) {
+    console.error("Error saving configs:", errorMessage(error));
     return { success: false, error: "No se pudieron guardar las configuraciones." };
   }
 }
@@ -32,7 +33,7 @@ export async function deleteConfig(key: string) {
     });
     revalidatePath("/settings");
     return { success: true };
-  } catch (error) {
+  } catch {
     return { success: false, error: "No se pudo eliminar la configuración." };
   }
 }

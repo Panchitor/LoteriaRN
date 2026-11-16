@@ -4,7 +4,13 @@ import { useState } from "react";
 import { toggleLive } from "./actions";
 import { Activity, Power, Video, Clock } from "lucide-react";
 
-export function LiveControl({ initialLive }: { initialLive: any }) {
+type LiveState = {
+  is_active: boolean;
+  url: string | null;
+  pollInterval: number;
+};
+
+export function LiveControl({ initialLive }: { initialLive: LiveState }) {
   const [isActive, setIsActive] = useState(initialLive.is_active);
   const [url, setUrl] = useState(initialLive.url || "");
   const [pollInterval, setPollInterval] = useState(initialLive.pollInterval || 10);

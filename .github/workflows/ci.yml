@@ -24,6 +24,7 @@ jobs:
           cache-dependency-path: server/package-lock.json
       - run: npm ci
       - run: npx prisma generate
+      - run: npm run lint
       - run: npm run build
         env:
           DATABASE_URL: postgresql://ci:ci@localhost:5432/ci?schema=public

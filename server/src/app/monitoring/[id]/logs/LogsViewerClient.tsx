@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Search } from "lucide-react";
 
 interface LogEntry {
   id: string;

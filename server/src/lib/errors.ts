@@ -1,0 +1,8 @@
+export function errorMessage(error: unknown, fallback = "Error desconocido"): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
+export function errorCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("code" in error)) return undefined;
+  return typeof error.code === "string" ? error.code : undefined;
+}

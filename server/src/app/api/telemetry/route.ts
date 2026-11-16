@@ -1,12 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { errorMessage } from "@/lib/errors";
+
+type TelemetryBody = {
+  token?: string;
+  playbackStatus?: string;
+  freeSpace?: number;
+  appVersion?: string;
+  hardwareId?: string;
+  downloadedVideos?: string | string[];
+  androidVersion?: string;
+  deviceModel?: string;
+  deviceSerial?: string;
+};
 
 export async function POST(req: NextRequest) {
   try {
-    let body: any = {};
+    let body: TelemetryBody = {};
     try {
       body = await req.json();
-    } catch (_) {
+    } catch {
       console.error("Failed to parse telemetry json body");
     }
     const { token, playbackStatus, freeSpace, appVersion, hardwareId, downloadedVideos, androidVersion, deviceModel, deviceSerial } = body;
@@ -86,8 +99,8 @@ export async function POST(req: NextRequest) {
       }
     });
 
-  } catch (err: any) {
-    console.error("TELEMETRY ROUTE ERROR:", err);
-    return NextResponse.json({ error: "Internal Error", details: err.message }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
+  } catch (error: unknown) {
+    console.error("TELEMETRY ROUTE ERROR:", errorMessage(error));
+    return NextResponse.json({ error: "Internal Error" }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
   }
 }

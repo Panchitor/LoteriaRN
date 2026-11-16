@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { errorMessage } from "@/lib/errors";
+
+type DeviceLogInput = { level?: unknown; message?: unknown };
 
 export async function POST(req: NextRequest) {
   try {
@@ -23,10 +26,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid device token" }, { status: 401 });
     }
 
-    const logEntries = logs.map((log: any) => ({
+    const logEntries = (logs as DeviceLogInput[]).map((log) => ({
       device_id: token,
-      level: log.level || 'info',
-      message: log.message || '',
+      level: typeof log.level === 'string' ? log.level.slice(0, 20) : 'info',
+      message: typeof log.message === 'string' ? log.message.slice(0, 2000) : '',
     }));
 
     if (logEntries.length > 0) {
@@ -38,8 +41,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true }, {
       headers: { 'Access-Control-Allow-Origin': '*' }
     });
-  } catch (err: any) {
-    console.error("LOGS ROUTE ERROR:", err);
+  } catch (error: unknown) {
+    console.error("LOGS ROUTE ERROR:", errorMessage(error));
     return NextResponse.json({ error: "Internal Error" }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
   }
 }

@@ -5,6 +5,7 @@ import path from "path";
 import crypto from "crypto";
 import fs from "fs";
 import ffmpeg from "fluent-ffmpeg";
+import { errorMessage } from "@/lib/errors";
 
 const STORAGE_PATH = process.env.STORAGE_PATH || "C:/LotAgencia/storage/videos";
 const MAX_FILE_SIZE = 400 * 1024 * 1024; // 400 MB
@@ -138,8 +139,8 @@ export async function POST(req: NextRequest) {
     };
 
     return NextResponse.json({ success: true, video: safeVideo });
-  } catch (err: any) {
-    console.error("Upload error:", err);
+  } catch (error: unknown) {
+    console.error("Upload error:", errorMessage(error));
     return NextResponse.json({ error: "Error interno al procesar el archivo" }, { status: 500 });
   }
 }

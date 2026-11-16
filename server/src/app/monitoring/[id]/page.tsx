@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { Activity, HardDrive, Wifi, ArrowLeft, MonitorPlay, CheckCircle, AlertTriangle } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { getDeviceOperationalState, operationalStateLabel } from "@/lib/deviceStatus";
 import { RemoteControls } from "./RemoteControls";
@@ -148,7 +149,7 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ id:
                         {f}
                       </div>
                     ));
-                  } catch (e) {
+                  } catch {
                     return <div className="text-muted text-sm text-center mt-4">Error leyendo archivos.</div>;
                   }
                 })()}
@@ -163,7 +164,7 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ id:
           <h3 className="text-sm font-bold text-muted uppercase tracking-widest mb-4">Última captura remota</h3>
           {device.last_screenshot ? (
             <div>
-              <img src={`/api/screenshots/${device.id}?v=${device.screenshot_at?.getTime() || 0}`} alt={`Captura de Agencia ${device.agency.number}`} className="w-full rounded border border-[#374151] bg-black object-contain" />
+              <Image src={`/api/screenshots/${device.id}?v=${device.screenshot_at?.getTime() || 0}`} alt={`Captura de Agencia ${device.agency.number}`} width={1280} height={720} unoptimized className="w-full h-auto rounded border border-[#374151] bg-black object-contain" />
               <p className="mt-3 text-xs text-muted">Capturada: {device.screenshot_at?.toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })}</p>
             </div>
           ) : <div className="grid min-h-52 place-items-center rounded border border-dashed border-[#374151] text-sm text-muted">Todavía no hay capturas de este dispositivo.</div>}

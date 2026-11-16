@@ -19,7 +19,16 @@ export default function UpdatesPage() {
     const response = await fetch('/api/admin/updates', { cache: 'no-store' });
     if (response.ok) setData(await response.json());
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/admin/updates', { cache: 'no-store' })
+      .then(response => response.ok ? response.json() : null)
+      .then(result => {
+        if (!cancelled && result) setData(result);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
 
   const pilotDevices = useMemo(() => data.devices.filter(d => d.update_channel === 'PILOT'), [data.devices]);
   const pilotVersion = data.config.PILOT_APK_VERSION || '';

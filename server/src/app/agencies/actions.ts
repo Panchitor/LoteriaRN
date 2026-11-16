@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/authorization";
 import { randomInt } from "crypto";
+import { errorCode } from "@/lib/errors";
 
 const ACTIVATION_DURATIONS: Record<string, number> = {
   "30m": 30 * 60 * 1000,
@@ -48,8 +49,8 @@ export async function createAgency(data: FormData) {
     });
     revalidatePath("/agencies");
     return { success: true, activationCode, expiresAt: expiresAt.toISOString() };
-  } catch (e: any) {
-    if (e.code === 'P2002') return { error: "Ese número de TV ya existe en la agencia/subagencia" };
+  } catch (error: unknown) {
+    if (errorCode(error) === 'P2002') return { error: "Ese número de TV ya existe en la agencia/subagencia" };
     return { error: "Error al crear la agencia" };
   }
 }
@@ -70,7 +71,7 @@ export async function deleteAgency(id: string) {
     });
     revalidatePath("/agencies");
     return { success: true };
-  } catch (e) {
+  } catch {
     return { error: "Error al eliminar" };
   }
 }

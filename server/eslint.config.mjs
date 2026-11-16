@@ -12,7 +12,18 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "check_db.js",
+    "regen.js",
+    "watchdog.js",
   ]),
+  {
+    files: ["src/app/**/page.tsx"],
+    rules: {
+      // These pages are async server components that intentionally calculate
+      // device freshness at request time; they are never client-rendered.
+      "react-hooks/purity": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

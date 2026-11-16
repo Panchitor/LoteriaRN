@@ -25,7 +25,7 @@ export async function GET() {
       }
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json({ live: false, error: "Internal Error" }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
   }
 }

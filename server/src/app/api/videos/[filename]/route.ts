@@ -4,6 +4,22 @@ import path from "path";
 
 const STORAGE_PATH = process.env.STORAGE_PATH || "C:/LotAgencia/storage/videos";
 
+function toWebStream(stream: fs.ReadStream): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      stream.on("data", (chunk: string | Buffer) => {
+        const bytes = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+        controller.enqueue(new Uint8Array(bytes));
+      });
+      stream.on("end", () => controller.close());
+      stream.on("error", error => controller.error(error));
+    },
+    cancel() {
+      stream.destroy();
+    },
+  });
+}
+
 export async function GET(req: NextRequest, { params }: { params: Promise<{ filename: string }> }) {
   try {
     const filename = (await params).filename;
@@ -23,7 +39,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ file
       const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
       const chunksize = end - start + 1;
       const fileStream = fs.createReadStream(filePath, { start, end });
-      const webStream = require("stream").Readable.toWeb(fileStream);
+      const webStream = toWebStream(fileStream);
 
       const headers = new Headers();
       headers.set("Content-Range", `bytes ${start}-${end}/${fileSize}`);
@@ -31,7 +47,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ file
       headers.set("Content-Length", chunksize.toString());
       headers.set("Content-Type", "video/mp4");
 
-      // @ts-ignore
       return new NextResponse(webStream, { status: 206, headers });
     } else {
       const headers = new Headers();
@@ -39,9 +54,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ file
       headers.set("Content-Type", "video/mp4");
 
       const fileStream = fs.createReadStream(filePath);
-      const webStream = require("stream").Readable.toWeb(fileStream);
+      const webStream = toWebStream(fileStream);
       
-      // @ts-ignore
       return new NextResponse(webStream, { status: 200, headers });
     }
   } catch (error) {

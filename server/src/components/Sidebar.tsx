@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, Tv, FileVideo, Settings, Activity, Users, LogOut, Download, FolderTree, Calendar, AlertTriangle, Type, ShieldAlert } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
@@ -38,7 +39,7 @@ export default function Sidebar({ role, username }: { role?: string, username?: 
       <div className="p-6 flex items-center justify-center border-b border-border">
         <div className="flex flex-col items-center">
           <div className="h-16 w-32 mb-2">
-            <img src="/logo-loteria-rn.png" alt="Logo Lotería de Río Negro" className="w-full h-full object-contain" />
+            <Image src="/logo-loteria-rn.png" alt="Logo Lotería de Río Negro" width={128} height={64} className="w-full h-full object-contain" priority />
           </div>
           <h1 className="text-xl font-bold tracking-tight text-white hidden">Lotería RN</h1>
           <p className="text-xs text-muted mb-1 mt-1">Gestor de Agencias</p>

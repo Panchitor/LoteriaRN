@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { errorCode, errorMessage } from "@/lib/errors";
 
 export async function POST(req: NextRequest) {
   try {
@@ -100,9 +101,9 @@ export async function POST(req: NextRequest) {
       }
     });
 
-  } catch (err: any) {
-    if (err.code === 'P2002') return NextResponse.json({ error: "Ese ID de etiqueta o instalación ya está asignado a otro dispositivo. Revise el registro antes de vincular." }, { status: 409 });
-    console.error("Register Error:", err);
+  } catch (error: unknown) {
+    if (errorCode(error) === 'P2002') return NextResponse.json({ error: "Ese ID de etiqueta o instalación ya está asignado a otro dispositivo. Revise el registro antes de vincular." }, { status: 409 });
+    console.error("Register Error:", errorMessage(error));
     return NextResponse.json({ error: "Error interno del servidor." }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
   }
 }

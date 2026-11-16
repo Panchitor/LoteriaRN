@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { errorMessage } from "@/lib/errors";
 
 export async function POST(req: NextRequest) {
   try {
@@ -45,8 +46,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true }, {
       headers: { 'Access-Control-Allow-Origin': '*' }
     });
-  } catch (err: any) {
-    console.error("STATS ROUTE ERROR:", err);
+  } catch (error: unknown) {
+    console.error("STATS ROUTE ERROR:", errorMessage(error));
     return NextResponse.json({ error: "Internal Error" }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
   }
 }

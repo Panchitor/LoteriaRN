@@ -1,6 +1,6 @@
 import {
-  Activity, AlertTriangle, CheckCircle2, Clock3, Database, Film, HardDrive,
-  Image as ImageIcon, MonitorPlay, Radio, Server, ShieldAlert, Tv, WifiOff,
+  Activity, AlertTriangle, Clock3, Database, Film, HardDrive,
+  MonitorPlay, Radio, Server, ShieldAlert, Tv, WifiOff,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { AutoRefresh } from "@/components/AutoRefresh";

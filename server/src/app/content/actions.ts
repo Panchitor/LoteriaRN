@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import fs from "fs";
 import path from "path";
 import { requireSession } from "@/lib/authorization";
+import { errorMessage } from "@/lib/errors";
 
 const STORAGE_PATH = process.env.STORAGE_PATH || "C:/LotAgencia/storage/videos";
 
@@ -30,8 +31,8 @@ export async function deleteVideo(id: string) {
     
     revalidatePath("/content");
     return { success: true };
-  } catch (e: any) {
-    return { error: "Error al eliminar: " + e.message };
+  } catch (error: unknown) {
+    return { error: "Error al eliminar: " + errorMessage(error) };
   }
 }
 
@@ -48,8 +49,8 @@ export async function reorderVideos(orderedIds: string[]) {
     await prisma.$transaction(updates);
     revalidatePath("/content");
     return { success: true };
-  } catch (e: any) {
-    return { error: "Error al reordenar: " + e.message };
+  } catch (error: unknown) {
+    return { error: "Error al reordenar: " + errorMessage(error) };
   }
 }
 

@@ -4,10 +4,15 @@ import { useActionState } from "react";
 import { loginAction } from "./actions";
 import { Loader2 } from "lucide-react";
 
+type LoginState = { error: string } | null;
+
 export default function LoginPage() {
   const [state, formAction, isPending] = useActionState(
-    async (prevState: any, formData: FormData) => await loginAction(formData),
-    null
+    async (previousState: LoginState, formData: FormData) => {
+      void previousState;
+      return await loginAction(formData);
+    },
+    null as LoginState
   );
 
   return (

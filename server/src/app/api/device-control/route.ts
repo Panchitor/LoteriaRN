@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 import { prisma } from "@/lib/prisma";
+import { errorMessage } from "@/lib/errors";
 
 async function authorizedDevice(token: string) {
   return prisma.device.findFirst({
@@ -45,8 +46,8 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ error: "Acción desconocida" }, { status: 400 });
-  } catch (err: any) {
-    console.error("DEVICE CONTROL ERROR:", err);
+  } catch (error: unknown) {
+    console.error("DEVICE CONTROL ERROR:", errorMessage(error));
     return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
 }

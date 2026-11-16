@@ -44,8 +44,8 @@ export function VideoUpload() {
       setFile(null);
       router.refresh();
       window.location.reload();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : "Error de subida");
     } finally {
       setLoading(false);
     }
