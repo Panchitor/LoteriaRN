@@ -7,7 +7,6 @@ const nextConfig: NextConfig = {
     },
     proxyPrefetch: 'flexible',
   },
-  output: 'standalone',
   serverExternalPackages: ['@prisma/client', 'bcryptjs', 'fluent-ffmpeg', '@ffmpeg-installer/ffmpeg'],
   async headers() {
     return [{
