@@ -24,6 +24,14 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ id:
   const operationalState = getDeviceOperationalState(device, now);
   const isOnline = operationalState === "online";
   const stateColor = operationalState === "online" ? "text-[#32d74b]" : operationalState === "delayed" ? "text-amber-300" : operationalState === "inactive" ? "text-slate-500" : "text-[#ff453a]";
+  let downloadedFiles: string[] = [];
+  let downloadedFilesInvalid = false;
+  try {
+    const parsed = device.downloaded_videos ? JSON.parse(device.downloaded_videos) : [];
+    downloadedFiles = Array.isArray(parsed) ? parsed.filter((file): file is string => typeof file === "string") : [];
+  } catch {
+    downloadedFilesInvalid = true;
+  }
 
   return (
     <div className="p-8 pb-20 sm:p-10 font-[family-name:var(--font-geist-sans)] max-w-5xl mx-auto w-full">
@@ -138,21 +146,15 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ id:
                 <HardDrive className="h-4 w-4" /> Archivos Descargados
               </h3>
               <div className="space-y-2 flex-1 overflow-y-auto">
-                {(() => {
-                  try {
-                    const files = device.downloaded_videos ? JSON.parse(device.downloaded_videos) : [];
-                    if (!files || files.length === 0) {
-                      return <div className="text-muted text-sm text-center mt-4">No hay archivos locales.</div>;
-                    }
-                    return files.map((f: string, i: number) => (
-                      <div key={i} className="text-white text-sm font-mono bg-black px-3 py-2 border border-[#374151] rounded">
-                        {f}
-                      </div>
-                    ));
-                  } catch {
-                    return <div className="text-muted text-sm text-center mt-4">Error leyendo archivos.</div>;
-                  }
-                })()}
+                {downloadedFilesInvalid ? (
+                  <div className="text-muted text-sm text-center mt-4">Error leyendo archivos.</div>
+                ) : downloadedFiles.length === 0 ? (
+                  <div className="text-muted text-sm text-center mt-4">No hay archivos locales.</div>
+                ) : downloadedFiles.map((file) => (
+                  <div key={file} className="text-white text-sm font-mono bg-black px-3 py-2 border border-[#374151] rounded">
+                    {file}
+                  </div>
+                ))}
               </div>
             </div>
           </div>

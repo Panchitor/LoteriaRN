@@ -16,6 +16,8 @@ controlada. La versión 1.0.85 continúa siendo la base estable de producción.
 - Descarga de medios a archivo temporal y reemplazo atómico después de verificarlo.
 - Canal piloto de APK con promoción explícita a estable.
 - Lint, pruebas, TypeScript y build de producción automatizados en CI.
+- Dependencias del servidor auditadas sin vulnerabilidades conocidas; Next.js y Prisma
+  actualizados a versiones corregidas y alineadas.
 
 ## Antes del primer piloto 1.0.86
 
@@ -37,6 +39,10 @@ controlada. La versión 1.0.85 continúa siendo la base estable de producción.
 6. Verificar reproducción, reinicio, actualización OTA, captura, logs y recuperación de red.
 7. Promover a estable por grupos, conservando la APK 1.0.85 para rollback.
 
+La carpeta `app-tv/android` contiene código nativo propio (`SilentInstallModule`). Por eso no se
+debe ejecutar `expo prebuild --clean` automáticamente: cualquier regeneración debe revisar y
+reaplicar ese módulo antes de compilar la APK.
+
 ## Infraestructura pendiente para producción definitiva
 
 - Contratar el servidor dedicado de 4 vCPU, 8 GB RAM y 50 GB SSD.
@@ -47,6 +53,8 @@ controlada. La versión 1.0.85 continúa siendo la base estable de producción.
 - Crear el secundario en `loteriarn-bk.patagonialive.media` y probar una caída real del
   principal antes de considerarlo disponible.
 - Configurar la sincronización cada 30 minutos y alertar si se atrasa dos ciclos.
+- Planificar la migración de Expo SDK en una rama separada: SDK 54 todavía arrastra avisos
+  transitivos de herramientas de compilación que requieren un salto mayor y pruebas en TV Box.
 
 ## Condición de salida
 
