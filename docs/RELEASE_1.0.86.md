@@ -23,11 +23,19 @@ Los archivos se conservan en `backups/releases-local/` y no se versionan.
 - El certificado coincide con la APK estable 1.0.85.
 - Cachés y carpetas de build Android eliminadas después de generar el candidato.
 
+## Despliegue del servidor
+
+- Backend desplegado el 17 de noviembre de 2026.
+- Backup completo local verificado mediante restauración temporal: 16 tablas, 1 dispositivo y
+  4 contenidos.
+- Migración `20261116160000_video_sha256` aplicada correctamente.
+- SHA-256 completado para los 4 contenidos existentes.
+- PM2, health, login, manifiesto público y telemetría compatible con 1.0.85 verificados.
+- El registro heredado queda habilitado temporalmente hasta completar la migración de APK.
+
 ## No ejecutado todavía
 
-- No se desplegó el servidor.
 - No se publicó la APK por OTA.
-- No se aplicó la migración de base de datos.
 - No se instaló el candidato en un TV Box real.
 
 El siguiente paso autorizado debe ser un despliegue controlado del servidor seguido por un
