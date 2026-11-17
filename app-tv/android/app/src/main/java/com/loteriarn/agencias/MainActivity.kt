@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.content.Intent
 import android.media.AudioManager
 import android.util.Log
+import android.view.WindowManager
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
@@ -24,6 +25,7 @@ class MainActivity : ReactActivity() {
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme);
     super.onCreate(null)
+    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     try {
       val audio = getSystemService(AUDIO_SERVICE) as AudioManager
       val target = (audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC) * 0.8).roundToInt()
@@ -32,6 +34,13 @@ class MainActivity : ReactActivity() {
     } catch (error: Exception) {
       Log.w("LoteriaSetup", "No se pudo establecer el volumen multimedia", error)
     }
+  }
+
+  override fun onResume() {
+    super.onResume()
+    // Some Android TV firmwares clear this flag after an installer, HDMI event,
+    // or launcher overlay. Reapply it whenever playback returns to foreground.
+    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
   }
 
   override fun onPostResume() {

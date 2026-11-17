@@ -2,7 +2,7 @@
   "expo": {
     "name": "Lotería RN Agencias",
     "slug": "loteria-rn-agencias",
-    "version": "1.0.86",
+    "version": "1.0.87",
     "orientation": "landscape",
     "icon": "./assets/adaptive-icon.png",
     "userInterfaceStyle": "dark",
@@ -16,7 +16,7 @@
       "supportsTablet": true
     },
     "android": {
-      "versionCode": 86,
+      "versionCode": 87,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
