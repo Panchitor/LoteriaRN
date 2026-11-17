@@ -24,14 +24,24 @@ function validVersion(version: string) {
   return /^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/.test(version);
 }
 
+function versionFromFilename(filename: string): string {
+  const match = filename.match(/v(\d+)[._](\d+)[._](\d+)/i);
+  return match ? `${match[1]}.${match[2]}.${match[3]}` : "";
+}
+
 export async function POST(req: NextRequest) {
   try {
     if (!(await requireAdmin(req))) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
     const formData = await req.formData();
     const file = formData.get("apk") as File | null;
-    const version = String(formData.get("version") || "").trim();
+    const submittedVersion = String(formData.get("version") || "").trim();
     const channel = String(formData.get("channel") || "PILOT").toUpperCase();
-    if (!file || !validVersion(version)) return NextResponse.json({ error: "Archivo o versión inválidos" }, { status: 400 });
+    if (!file) return NextResponse.json({ error: "Falta el archivo APK" }, { status: 400 });
+    const detectedVersion = versionFromFilename(file.name);
+    const version = detectedVersion || submittedVersion;
+    if (!validVersion(version) || (detectedVersion && submittedVersion && detectedVersion !== submittedVersion)) {
+      return NextResponse.json({ error: "No se pudo detectar una versión válida en el nombre de la APK" }, { status: 400 });
+    }
     if (!file.name.toLowerCase().endsWith(".apk") || file.type && file.type !== "application/vnd.android.package-archive") {
       return NextResponse.json({ error: "El archivo no parece ser una APK válida" }, { status: 400 });
     }

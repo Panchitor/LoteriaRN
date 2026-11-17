@@ -32,6 +32,8 @@ Los archivos se conservan en `backups/releases-local/` y no se versionan.
 - SHA-256 completado para los 4 contenidos existentes.
 - PM2, health, login, manifiesto público y telemetría compatible con 1.0.85 verificados.
 - El registro heredado queda habilitado temporalmente hasta completar la migración de APK.
+- Hotfix de publicación aplicado: proxy configurado para APK de hasta 150 MB y detección
+  automática de versión desde el nombre del archivo.
 
 ## No ejecutado todavía
 

@@ -7,6 +7,11 @@ type Device = { id: string; tv_number: number | null; app_version: string | null
 type Apk = { filename: string; version: string; sizeBytes: number; createdAt: string };
 type Data = { history: Apk[]; devices: Device[]; config: Record<string, string> };
 
+function versionFromFilename(filename: string): string {
+  const match = filename.match(/v(\d+)[._](\d+)[._](\d+)/i);
+  return match ? `${match[1]}.${match[2]}.${match[3]}` : "";
+}
+
 export default function UpdatesPage() {
   const [data, setData] = useState<Data>({ history: [], devices: [], config: {} });
   const [file, setFile] = useState<File | null>(null);
@@ -44,6 +49,15 @@ export default function UpdatesPage() {
     setMessage(response.ok ? `APK ${version} publicada en PRUEBA. Todavía no se envió a ningún equipo.` : result.error);
     if (response.ok) { setFile(null); setVersion(''); await load(); }
     setBusy(false);
+  }
+
+  function selectApk(selectedFile: File | null) {
+    setFile(selectedFile);
+    const detected = selectedFile ? versionFromFilename(selectedFile.name) : "";
+    setVersion(detected);
+    setMessage(selectedFile && !detected
+      ? "No pude detectar la versión. El archivo debe incluirla, por ejemplo: loteria-tv-v1_0_86.apk"
+      : "");
   }
 
   async function action(payload: object, confirmText?: string) {
@@ -86,9 +100,8 @@ export default function UpdatesPage() {
     <section className="glass border border-border rounded-2xl p-6">
       <h2 className="text-xl font-bold text-white mb-1">1. Subir APK de prueba</h2>
       <p className="text-sm text-muted mb-5">Subirla no actualiza ningún TV Box hasta que lo selecciones abajo.</p>
-      <form onSubmit={uploadPilot} className="grid md:grid-cols-[180px_1fr_auto] gap-3 items-end">
-        <label className="text-sm text-muted">Versión<input required value={version} onChange={e => setVersion(e.target.value)} placeholder="1.0.76" className="mt-2 w-full bg-background border border-border rounded-lg px-3 py-3 text-white" /></label>
-        <label className="text-sm text-muted">Archivo APK<input required type="file" accept=".apk" onChange={e => setFile(e.target.files?.[0] || null)} className="mt-2 block w-full bg-background border border-border rounded-lg px-3 py-2 text-white" /></label>
+      <form onSubmit={uploadPilot} className="grid md:grid-cols-[1fr_auto] gap-3 items-end">
+        <label className="text-sm text-muted">Archivo APK<input required type="file" accept=".apk" onChange={e => selectApk(e.target.files?.[0] || null)} className="mt-2 block w-full bg-background border border-border rounded-lg px-3 py-2 text-white" />{version && <span className="mt-2 block text-xs text-primary">Versión detectada automáticamente: {version}</span>}</label>
         <button disabled={busy || !file || !version} className="bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-lg px-5 py-3 disabled:opacity-50 flex gap-2"><Upload /> Subir a prueba</button>
       </form>
     </section>
