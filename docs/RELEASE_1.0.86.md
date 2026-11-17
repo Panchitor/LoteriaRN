@@ -8,7 +8,7 @@ Generado localmente el 17 de noviembre de 2026 desde el commit
 | Artefacto | Tamaño | SHA-256 |
 | --- | ---: | --- |
 | `loteria-server-v1_0_86.tar.gz` | 156.278 bytes | `a5160bc735f227e594d3580958fcf1fe4917de33fcc79fa81d7fd4b6a64d7cb3` |
-| `loteria-tv-v1_0_86-candidate.apk` | 59.044.315 bytes | `1115a784321b98d8cffc3b2ae33b682bb677cd779ac8eb940562bea19643664b` |
+| `loteria-tv-v1_0_86-candidate.apk` | 59.045.467 bytes | `3164cc8010e67ca1b016322a5d30ed545e8a0c04492bdded0d64c8ec03b30245` |
 
 Los archivos se conservan en `backups/releases-local/` y no se versionan.
 
@@ -16,12 +16,14 @@ Los archivos se conservan en `backups/releases-local/` y no se versionan.
 
 - Servidor: lint, 4 pruebas, TypeScript y build de producción.
 - Dependencias del servidor: `npm audit` sin vulnerabilidades conocidas.
-- Android: TypeScript, 4 pruebas y `assembleRelease` exitoso.
+- Android: TypeScript, 6 pruebas y `assembleRelease` exitoso.
 - APK: `versionCode=86`, `versionName=1.0.86`, minSdk 24 y targetSdk 36.
 - Firma APK v2 válida.
 - Certificado SHA-256: `fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c`.
 - El certificado coincide con la APK estable 1.0.85.
 - Cachés y carpetas de build Android eliminadas después de generar el candidato.
+- Recuperación local automática: reanuda la reproducción, vuelve a montar el reproductor y,
+  como último recurso, avanza al siguiente video o reinicia el actual sin intervención del control.
 
 ## Despliegue del servidor
 

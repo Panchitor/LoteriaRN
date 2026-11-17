@@ -9,6 +9,7 @@ import * as Network from 'expo-network';
 import { WebView } from 'react-native-webview';
 
 import { MarqueeTicker } from '../components/MarqueeTicker';
+import { localRecoveryAction } from '../utils/localPlaybackRecovery';
 import { fetchReadWithFailover, fetchWithFailover, getApiUrl, getPrimaryApiUrl, saveServerUrls } from '../services/apiClient';
 import { hasLiveProgress } from '../utils/liveProgress';
 import { MAINTENANCE_NOTICE, type ServerSource } from '../utils/failoverPolicy';
@@ -100,6 +101,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
   // Watchdog refs
   const lastPositionRef = useRef<number>(0);
   const lastPositionTimeRef = useRef<number>(Date.now());
+  const localRecoveryStageRef = useRef<number>(0);
   
   const liveLastPositionRef = useRef<number>(0);
   const liveLastPositionTimeRef = useRef<number>(Date.now());
@@ -623,6 +625,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
       if (status.isPlaying && Math.abs(status.positionMillis - lastPositionRef.current) >= 250) {
         lastPositionRef.current = status.positionMillis;
         lastPositionTimeRef.current = Date.now();
+        localRecoveryStageRef.current = 0;
       }
       // Normal end logic
       if (status.didJustFinish) {
@@ -671,6 +674,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
   useEffect(() => {
     lastPositionRef.current = 0;
     lastPositionTimeRef.current = Date.now();
+    localRecoveryStageRef.current = 0;
   }, [currentVideoFilename, liveStatus.live, liveStatus.url]);
 
   useEffect(() => {
@@ -693,16 +697,35 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
       }
 
       const localIsActive = !!localUri && !isImageItem && (!liveIsActive || !isLiveReady);
-      if (localIsActive && now - lastPositionTimeRef.current > 20000) {
-        sendRemoteLog('warn', `Watchdog: video local congelado (${currentVideoFilename}). Reiniciando reproductor.`);
-        lastPositionRef.current = 0;
-        lastPositionTimeRef.current = now;
-        setOfflineRetryKey(prev => prev + 1);
+      if (localIsActive) {
+        const stalledMs = now - lastPositionTimeRef.current;
+        const action = localRecoveryAction(stalledMs, localRecoveryStageRef.current, playlist.length > 1);
+        if (action === 'resume') {
+          localRecoveryStageRef.current = 1;
+          sendRemoteLog('warn', `Watchdog: video local pausado (${currentVideoFilename}). Reanudando automáticamente.`);
+          loopVideoRef.current?.playAsync().catch(() => undefined);
+        } else if (action === 'remount') {
+          localRecoveryStageRef.current = 2;
+          sendRemoteLog('warn', `Watchdog: video local sin avance (${currentVideoFilename}). Recargando reproductor.`);
+          setOfflineRetryKey(prev => prev + 1);
+        } else if (action === 'next') {
+          localRecoveryStageRef.current = 3;
+          sendRemoteLog('warn', `Watchdog: video local irrecuperable (${currentVideoFilename}). Pasando al siguiente.`);
+          lastPositionRef.current = 0;
+          lastPositionTimeRef.current = now;
+          setCurrentOfflineIndex(prev => (prev + 1) % playlist.length);
+        } else if (action === 'replay') {
+          localRecoveryStageRef.current = 3;
+          sendRemoteLog('warn', `Watchdog: reiniciando el único video local (${currentVideoFilename}).`);
+          lastPositionRef.current = 0;
+          lastPositionTimeRef.current = now;
+          loopVideoRef.current?.replayAsync().catch(() => setOfflineRetryKey(prev => prev + 1));
+        }
       }
     }, 5000);
 
     return () => clearInterval(timer);
-  }, [isUpdating, emergency.active, liveStatus.live, liveStatus.url, liveHasError, isLiveReady, localUri, isImageItem, currentVideoFilename]);
+  }, [isUpdating, emergency.active, liveStatus.live, liveStatus.url, liveHasError, isLiveReady, localUri, isImageItem, currentVideoFilename, playlist.length]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextState => {
@@ -711,6 +734,8 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
       const now = Date.now();
       lastPositionTimeRef.current = now;
       liveLastPositionTimeRef.current = now;
+      localRecoveryStageRef.current = 0;
+      loopVideoRef.current?.playAsync().catch(() => undefined);
       if (liveStatus.live && liveStatus.url !== '' && !liveHasError) {
         setLiveRetryKey(prev => prev + 1);
       } else if (!isImageItem && localUri) {
