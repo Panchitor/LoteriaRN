@@ -165,10 +165,11 @@ export function VideoUpload() {
   );
 }
 
-export function StandbyUpload({ configured }: { configured: boolean }) {
+export function StandbyUpload({ configured, initialRevision }: { configured: boolean; initialRevision: number }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [revision, setRevision] = useState(initialRevision);
 
   const upload = async (file?: File) => {
     if (!file) return;
@@ -181,6 +182,7 @@ export function StandbyUpload({ configured }: { configured: boolean }) {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'No se pudo guardar');
       setMessage('Imagen de espera guardada.');
+      setRevision(Date.now());
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo guardar');
@@ -191,7 +193,7 @@ export function StandbyUpload({ configured }: { configured: boolean }) {
 
   return <div className="glass rounded-2xl border border-border p-5 mb-8 flex flex-col md:flex-row items-center gap-5">
     <div className="w-44 h-24 bg-black rounded-lg border border-border overflow-hidden flex items-center justify-center">
-      {configured ? <Image src="/api/standby" alt="Pantalla de espera" width={176} height={96} unoptimized className="w-full h-full object-contain" /> : <span className="text-xs text-muted text-center px-2">Imagen institucional predeterminada</span>}
+      {configured ? <Image key={revision} src={`/api/standby?v=${revision}`} alt="Pantalla de espera" width={176} height={96} unoptimized className="w-full h-full object-contain" /> : <span className="text-xs text-muted text-center px-2">Imagen institucional predeterminada</span>}
     </div>
     <div className="flex-1">
       <h2 className="font-bold text-white">Pantalla de espera</h2>

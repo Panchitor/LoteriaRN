@@ -9,30 +9,38 @@ export async function getEmergencyState() {
   const configs = await prisma.systemConfig.findMany({
     where: {
       key: {
-        in: ['EMERGENCY_ACTIVE', 'EMERGENCY_MESSAGE', 'EMERGENCY_BG_COLOR', 'EMERGENCY_TITLE_COLOR', 'EMERGENCY_MESSAGE_COLOR']
+        in: ['EMERGENCY_ACTIVE', 'EMERGENCY_TITLE', 'EMERGENCY_MESSAGE', 'EMERGENCY_BG_COLOR', 'EMERGENCY_TITLE_COLOR', 'EMERGENCY_MESSAGE_COLOR']
       }
     }
   });
 
   const isActive = configs.find(c => c.key === 'EMERGENCY_ACTIVE')?.value === 'true';
   const message = configs.find(c => c.key === 'EMERGENCY_MESSAGE')?.value || '';
+  const title = configs.find(c => c.key === 'EMERGENCY_TITLE')?.value || 'EMERGENCIA';
   const backgroundColor = configs.find(c => c.key === 'EMERGENCY_BG_COLOR')?.value || '#7f1d1d';
   const titleColor = configs.find(c => c.key === 'EMERGENCY_TITLE_COLOR')?.value || '#ef4444';
   const messageColor = configs.find(c => c.key === 'EMERGENCY_MESSAGE_COLOR')?.value || '#ffffff';
 
-  return { isActive, message, backgroundColor, titleColor, messageColor };
+  return { isActive, title, message, backgroundColor, titleColor, messageColor };
 }
 
-export async function toggleEmergency(isActive: boolean, message: string, colors: { backgroundColor: string; titleColor: string; messageColor: string }) {
+export async function toggleEmergency(isActive: boolean, title: string, message: string, colors: { backgroundColor: string; titleColor: string; messageColor: string }) {
   await requireAdmin();
   const validColor = (value: string) => /^#[0-9a-f]{6}$/i.test(value);
   if (![colors.backgroundColor, colors.titleColor, colors.messageColor].every(validColor)) {
     throw new Error('Colores inválidos');
   }
+  const cleanTitle = title.trim().slice(0, 80) || 'EMERGENCIA';
   await prisma.systemConfig.upsert({
     where: { key: 'EMERGENCY_ACTIVE' },
     update: { value: isActive ? 'true' : 'false' },
     create: { key: 'EMERGENCY_ACTIVE', value: isActive ? 'true' : 'false' }
+  });
+
+  await prisma.systemConfig.upsert({
+    where: { key: 'EMERGENCY_TITLE' },
+    update: { value: cleanTitle },
+    create: { key: 'EMERGENCY_TITLE', value: cleanTitle }
   });
 
   for (const [key, value] of [

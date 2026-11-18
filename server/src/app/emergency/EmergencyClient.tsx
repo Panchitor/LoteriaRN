@@ -5,9 +5,10 @@ import { toggleEmergency } from "./actions";
 import { AlertTriangle, Power } from "lucide-react";
 import { AutoRefresh } from "@/components/AutoRefresh";
 
-export function EmergencyClient({ initialState }: { initialState: { isActive: boolean, message: string, backgroundColor: string, titleColor: string, messageColor: string } }) {
+export function EmergencyClient({ initialState }: { initialState: { isActive: boolean, title: string, message: string, backgroundColor: string, titleColor: string, messageColor: string } }) {
   const [isActive, setIsActive] = useState(initialState.isActive);
   const [message, setMessage] = useState(initialState.message);
+  const [title, setTitle] = useState(initialState.title);
   const [backgroundColor, setBackgroundColor] = useState(initialState.backgroundColor);
   const [titleColor, setTitleColor] = useState(initialState.titleColor);
   const [messageColor, setMessageColor] = useState(initialState.messageColor);
@@ -25,7 +26,7 @@ export function EmergencyClient({ initialState }: { initialState: { isActive: bo
     setShowConfirm(false);
     setLoading(true);
     try {
-      await toggleEmergency(pendingState, message, { backgroundColor, titleColor, messageColor });
+      await toggleEmergency(pendingState, title, message, { backgroundColor, titleColor, messageColor });
       setIsActive(pendingState);
     } catch (e) {
       console.error(e);
@@ -60,6 +61,15 @@ export function EmergencyClient({ initialState }: { initialState: { isActive: bo
           </div>
 
           <div className="mt-6">
+            <label className="block text-sm font-medium text-muted mb-2">Título de la alerta</label>
+            <input
+              className="w-full bg-background border border-border rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-50 mb-4"
+              maxLength={80}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              disabled={loading || isActive}
+              placeholder="EMERGENCIA"
+            />
             <label className="block text-sm font-medium text-muted mb-2">Mensaje de Emergencia</label>
             <textarea
               className="w-full bg-background border border-border rounded-xl p-4 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all resize-none disabled:opacity-50"
@@ -84,7 +94,7 @@ export function EmergencyClient({ initialState }: { initialState: { isActive: bo
             ))}
           </div>
           <div className="mt-4 rounded-xl p-5 text-center" style={{ backgroundColor }}>
-            <div className="text-2xl font-black" style={{ color: titleColor }}>EMERGENCIA</div>
+            <div className="text-2xl font-black" style={{ color: titleColor }}>{title || 'EMERGENCIA'}</div>
             <div className="mt-2" style={{ color: messageColor }}>{message || 'Mensaje de emergencia'}</div>
           </div>
         </div>

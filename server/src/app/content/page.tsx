@@ -72,7 +72,7 @@ export default async function ContentPage() {
         </div>
       </div>
 
-      <StandbyUpload configured={Boolean(standby?.value)} />
+      <StandbyUpload configured={Boolean(standby?.value)} initialRevision={standby?.updated_at.getTime() || 0} />
 
       <div className="glass rounded-2xl border border-border overflow-hidden">
         <div className="bg-surface-hover/80 px-6 py-4 border-b border-border flex items-center gap-2">

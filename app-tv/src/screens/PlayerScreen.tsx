@@ -80,6 +80,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
   const [tickers, setTickers] = useState<TickerItem[]>([]);
   const [emergency, setEmergency] = useState({
     active: false,
+    title: 'EMERGENCIA',
     message: '',
     backgroundColor: '#7f1d1d',
     titleColor: '#ef4444',
@@ -109,6 +110,8 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
   const manifestPlaylistRef = useRef<ManifestVideo[]>([]);
   const manifestLoadedRef = useRef(false);
   const currentFilenameRef = useRef<string | null>(null);
+  const standbyHashRef = useRef<string | null>(null);
+  const standbyLoadLoggedRef = useRef(false);
   const deviceInfoRef = useRef<{ androidVersion?: string; deviceModel?: string; deviceSerial?: string }>({});
 
   const loopVideoRef = useRef<Video>(null);
@@ -426,6 +429,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
       if (current.exists && standby.hash_sha256 && SilentInstall?.sha256File) {
         const hash = await SilentInstall.sha256File(target.replace('file://', ''));
         if (hash?.toLowerCase() === standby.hash_sha256.toLowerCase()) {
+          standbyHashRef.current = standby.hash_sha256.toLowerCase();
           setStandbyUri(target);
           return;
         }
@@ -440,6 +444,8 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
       }
       await FileSystem.deleteAsync(target, { idempotent: true });
       await FileSystem.moveAsync({ from: temporary, to: target });
+      standbyHashRef.current = standby.hash_sha256?.toLowerCase() || null;
+      standbyLoadLoggedRef.current = false;
       setStandbyUri(target);
     } catch (error: any) {
       sendRemoteLog('warn', `No se pudo actualizar la imagen de espera: ${error?.message}`);
@@ -527,6 +533,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
           if (dataLive.emergency !== undefined) {
             setEmergency({
               active: dataLive.emergency,
+              title: dataLive.emergencyTitle || 'EMERGENCIA',
               message: dataLive.emergencyMessage || '',
               backgroundColor: dataLive.emergencyBackgroundColor || '#7f1d1d',
               titleColor: dataLive.emergencyTitleColor || '#ef4444',
@@ -865,7 +872,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
     return (
       <View style={[styles.container, { backgroundColor: emergency.backgroundColor, justifyContent: 'center', alignItems: 'center', padding: 40 }]}>
         <Text style={{ color: emergency.titleColor, fontSize: 72, fontWeight: '900', marginBottom: 20 }}>
-          🚨 EMERGENCIA
+          🚨 {emergency.title || 'EMERGENCIA'}
         </Text>
         <Text style={{ color: emergency.messageColor, fontSize: 36, textAlign: 'center', fontWeight: 'bold', lineHeight: 50 }}>
           {emergency.message || 'Atención: Mensaje de Emergencia en Pantalla'}
@@ -878,9 +885,27 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
 
   return (
     <View style={styles.container}>
+      <View style={styles.standbyLayer}>
+        <Image
+          source={standbyUri ? { uri: standbyUri } : require('../../assets/logo_official.png')}
+          style={styles.standbyImage}
+          resizeMode="contain"
+          onLoad={() => {
+            if (standbyLoadLoggedRef.current) return;
+            standbyLoadLoggedRef.current = true;
+            sendRemoteLog('info', `Imagen de espera visible (${standbyHashRef.current ? 'personalizada' : 'institucional'}).`);
+          }}
+          onError={(event) => {
+            sendRemoteLog('error', `No se pudo mostrar la imagen de espera: ${event.nativeEvent.error}`);
+            standbyHashRef.current = null;
+            standbyLoadLoggedRef.current = false;
+            setStandbyUri(null);
+          }}
+        />
+      </View>
       
       {/* OFFLINE LOOP PLAYER (VIDEO & IMAGE) - ALWAYS MOUNTED IN BACKGROUND */}
-      <View style={styles.playerWrapper}>
+      <View style={[styles.playerWrapper, !offlineSrc && styles.transparentPlayer]}>
          {offlineSrc ? (
           <Animated.View style={[StyleSheet.absoluteFill, { opacity: fadeAnim }]}>
            {isImageItem ? (
@@ -920,9 +945,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
            )}
           </Animated.View>
          ) : (
-           <View style={styles.emptyPlaylist}>
-             <Image source={standbyUri ? { uri: standbyUri } : require('../../assets/logo_official.png')} style={styles.standbyImage} resizeMode="contain" />
-           </View>
+           <View style={styles.emptyPlaylist} />
          )}
       </View>
 
@@ -1033,6 +1056,8 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000000' },
   playerWrapper: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000000' },
+  transparentPlayer: { backgroundColor: 'transparent' },
+  standbyLayer: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000000' },
   emptyPlaylist: { justifyContent: 'center', alignItems: 'center' },
   standbyImage: { width: '70%', height: '70%' },
   emptyText: { color: '#64748b', marginTop: 10 },
