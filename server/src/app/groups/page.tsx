@@ -1,10 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import GroupsClient from "./GroupsClient";
 import { FolderTree } from "lucide-react";
+import { requireAdmin } from "@/lib/authorization";
 
 export const dynamic = 'force-dynamic';
 
 export default async function GroupsPage() {
+  await requireAdmin();
   const groups = await prisma.deviceGroup.findMany({
     include: {
       _count: {

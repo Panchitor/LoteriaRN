@@ -35,7 +35,7 @@ function recoveryType(message: string) {
 
 export default async function AlertsPage() {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const [devices, recoveryLogs, latestVersionConfig] = await Promise.all([
+  const [devices, recoveryLogs, versionConfigs] = await Promise.all([
     prisma.device.findMany({ include: { agency: true }, orderBy: { last_seen: "desc" } }),
     prisma.deviceLog.findMany({
       where: {
@@ -49,10 +49,11 @@ export default async function AlertsPage() {
       orderBy: { created_at: "desc" },
       take: 2000,
     }),
-    prisma.systemConfig.findUnique({ where: { key: "LATEST_APK_VERSION" } }),
+    prisma.systemConfig.findMany({ where: { key: { in: ["LATEST_APK_VERSION", "PILOT_APK_VERSION"] } } }),
   ]);
 
-  const latestVersion = latestVersionConfig?.value;
+  const latestVersion = versionConfigs.find(c => c.key === "LATEST_APK_VERSION")?.value;
+  const pilotVersion = versionConfigs.find(c => c.key === "PILOT_APK_VERSION")?.value;
   const now = Date.now();
   const active: Incident[] = [];
 
@@ -73,7 +74,8 @@ export default async function AlertsPage() {
     if (operationalState === "offline") active.push({ ...common, key: `${device.id}-offline`, type: "Sin conexión", detail: elapsedDetail(ageSeconds) });
     if (device.playback_status === "error") active.push({ ...common, key: `${device.id}-playback`, type: "Error de reproducción", detail: "El reproductor informó un error" });
     if (device.free_space !== null && Number(device.free_space) < 2 * GB) active.push({ ...common, key: `${device.id}-storage`, type: "Poco almacenamiento", detail: `${(Number(device.free_space) / GB).toFixed(1)} GB libres` });
-    if (latestVersion && device.app_version && device.app_version !== latestVersion) active.push({ ...common, key: `${device.id}-version`, type: "Versión desactualizada", detail: `${device.app_version} instalada · ${latestVersion} disponible` });
+    const expectedVersion = device.update_channel === "PILOT" && pilotVersion ? pilotVersion : latestVersion;
+    if (expectedVersion && device.app_version && device.app_version !== expectedVersion) active.push({ ...common, key: `${device.id}-version`, type: "Versión desactualizada", detail: `${device.app_version} instalada · ${expectedVersion} disponible` });
   }
 
   const grouped = new Map<string, Incident>();

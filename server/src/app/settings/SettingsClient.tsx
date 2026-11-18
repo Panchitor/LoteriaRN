@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { saveConfigs, deleteConfig } from "./actions";
-import { Save, Plus, Trash2, Loader2 } from "lucide-react";
+import { saveConfigs } from "./actions";
+import { Save, Loader2 } from "lucide-react";
 
 type Config = {
   key: string;
@@ -10,43 +10,29 @@ type Config = {
 };
 
 export function SettingsClient({ initialConfigs }: { initialConfigs: Config[] }) {
+  const defaults: Config[] = [
+    { key: 'FLUSSONIC_BASE_URL', value: '' },
+    { key: 'FLUSSONIC_POLL_INTERVAL', value: '5' },
+    { key: 'PRIMARY_API_URL', value: 'https://loteriarn.patagonialive.media' },
+    { key: 'SECONDARY_API_URL', value: '' },
+  ];
   const [configs, setConfigs] = useState<Config[]>(
-    initialConfigs.length > 0 ? initialConfigs : [{ key: "FLUSSONIC_BASE_URL", value: "" }]
+    defaults.map(item => initialConfigs.find(config => config.key === item.key) || item)
   );
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
 
-  const handleAddPreset = (key: string, defaultValue: string) => {
-    if (!configs.find(c => c.key === key)) {
-      setConfigs([...configs, { key, value: defaultValue }]);
-    }
-  };
-
-  const handleAdd = () => {
-    setConfigs([...configs, { key: "", value: "" }]);
-  };
-
-  const handleUpdate = (index: number, field: 'key' | 'value', val: string) => {
+  const handleUpdate = (index: number, val: string) => {
     const newConfigs = [...configs];
-    newConfigs[index][field] = val;
+    newConfigs[index].value = val;
     setConfigs(newConfigs);
   };
 
-  const handleRemove = async (index: number) => {
-    const conf = configs[index];
-    if (conf.key && initialConfigs.find(c => c.key === conf.key)) {
-      setLoading(true);
-      const res = await deleteConfig(conf.key);
-      if (res.success) {
-        setConfigs(configs.filter((_, i) => i !== index));
-        setMessage({ type: 'success', text: 'Variable eliminada correctamente.' });
-      } else {
-        setMessage({ type: 'error', text: res.error || 'Error al eliminar.' });
-      }
-      setLoading(false);
-    } else {
-      setConfigs(configs.filter((_, i) => i !== index));
-    }
+  const labels: Record<string, string> = {
+    FLUSSONIC_BASE_URL: 'URL de transmisión en vivo',
+    FLUSSONIC_POLL_INTERVAL: 'Comprobación del vivo (segundos)',
+    PRIMARY_API_URL: 'Servidor principal',
+    SECONDARY_API_URL: 'Servidor de respaldo (futuro)',
   };
 
   const handleSave = async () => {
@@ -74,35 +60,16 @@ export function SettingsClient({ initialConfigs }: { initialConfigs: Config[] })
 
       <div className="space-y-3">
         {configs.map((config, index) => (
-          <div key={index} className="flex gap-4 items-start">
+          <div key={config.key} className="flex gap-4 items-start">
             <div className="flex-1">
-              <label className="text-xs font-semibold text-muted mb-1 block uppercase tracking-wider">Clave</label>
-              <input 
-                type="text"
-                placeholder="Ej. HEARTBEAT_INTERVAL"
-                value={config.key}
-                onChange={(e) => handleUpdate(index, 'key', e.target.value.toUpperCase())}
-                className="w-full bg-background hover:bg-surface-hover focus:bg-surface-hover border border-border rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all font-mono text-sm"
-              />
-            </div>
-            <div className="flex-[2]">
-              <label className="text-xs font-semibold text-muted mb-1 block uppercase tracking-wider">Valor</label>
+              <label className="text-sm font-semibold text-white mb-1 block">{labels[config.key]}</label>
               <input 
                 type="text"
                 placeholder="Valor de la configuración..."
                 value={config.value}
-                onChange={(e) => handleUpdate(index, 'value', e.target.value)}
+                onChange={(e) => handleUpdate(index, e.target.value)}
                 className="w-full bg-background hover:bg-surface-hover focus:bg-surface-hover border border-border rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all font-mono text-sm"
               />
-            </div>
-            <div className="pt-6">
-              <button 
-                onClick={() => handleRemove(index)}
-                className="p-2.5 rounded-lg bg-danger/10 text-danger hover:bg-danger hover:text-white border border-danger/20 transition-colors"
-                title="Eliminar"
-              >
-                <Trash2 className="w-5 h-5" />
-              </button>
             </div>
           </div>
         ))}
@@ -114,32 +81,7 @@ export function SettingsClient({ initialConfigs }: { initialConfigs: Config[] })
       </div>
 
       <div className="flex flex-wrap justify-between items-center pt-6 border-t border-border gap-4">
-        <div className="flex gap-2 items-center flex-wrap">
-          <button 
-            onClick={handleAdd}
-            className="flex items-center gap-2 text-muted hover:text-white transition-colors text-sm font-medium px-4 py-2 rounded-lg hover:bg-surface-hover border border-border"
-          >
-            <Plus className="w-4 h-4" /> Agregar Variable
-          </button>
-
-          {!configs.find(c => c.key === "PRIMARY_API_URL") && (
-            <button
-              onClick={() => handleAddPreset("PRIMARY_API_URL", "https://loteriarn.patagonialive.media")}
-              className="text-xs font-semibold text-primary bg-primary/10 border border-primary/20 hover:bg-primary/20 px-3 py-2 rounded-lg transition-colors"
-            >
-              + URL Servidor Primario
-            </button>
-          )}
-
-          {!configs.find(c => c.key === "SECONDARY_API_URL") && (
-            <button
-              onClick={() => handleAddPreset("SECONDARY_API_URL", "https://backup.patagonialive.media")}
-              className="text-xs font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 px-3 py-2 rounded-lg transition-colors"
-            >
-              + URL Servidor Secundario (Fallback)
-            </button>
-          )}
-        </div>
+        <p className="text-xs text-muted">Las versiones APK, hashes y emergencia se gestionan desde sus pantallas específicas.</p>
 
         <button 
           onClick={handleSave}

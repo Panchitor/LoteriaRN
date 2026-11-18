@@ -1,11 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { SettingsClient } from "./SettingsClient";
 import { Settings as SettingsIcon } from "lucide-react";
+import { requireAdmin } from "@/lib/authorization";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
+  await requireAdmin();
   const configs = await prisma.systemConfig.findMany({
+    where: { key: { in: ['FLUSSONIC_BASE_URL', 'FLUSSONIC_POLL_INTERVAL', 'PRIMARY_API_URL', 'SECONDARY_API_URL'] } },
     orderBy: { key: 'asc' }
   });
 
@@ -17,7 +20,7 @@ export default async function SettingsPage() {
           Configuración del Sistema
         </h1>
         <p className="text-muted mt-2">
-          Variables globales y parámetros técnicos de entorno.
+          Transmisión en vivo y servidores. Las variables internas se administran automáticamente.
         </p>
       </div>
 

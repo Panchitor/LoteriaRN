@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
 
     // 3. Fetch Latest APK Version, Emergency, and Failover Server URLs from SystemConfig
     const configs = await prisma.systemConfig.findMany({
-      where: { key: { in: ['LATEST_APK_VERSION', 'LATEST_APK_URL', 'LATEST_APK_SHA256', 'PILOT_APK_VERSION', 'PILOT_APK_URL', 'PILOT_APK_SHA256', 'FLUSSONIC_POLL_INTERVAL', 'EMERGENCY_ACTIVE', 'EMERGENCY_MESSAGE', 'PRIMARY_API_URL', 'SECONDARY_API_URL'] } }
+      where: { key: { in: ['LATEST_APK_VERSION', 'LATEST_APK_URL', 'LATEST_APK_SHA256', 'PILOT_APK_VERSION', 'PILOT_APK_URL', 'PILOT_APK_SHA256', 'FLUSSONIC_POLL_INTERVAL', 'EMERGENCY_ACTIVE', 'EMERGENCY_MESSAGE', 'EMERGENCY_BG_COLOR', 'EMERGENCY_TITLE_COLOR', 'EMERGENCY_MESSAGE_COLOR', 'PRIMARY_API_URL', 'SECONDARY_API_URL'] } }
     });
     const stableApkVersion = configs.find(c => c.key === 'LATEST_APK_VERSION')?.value || null;
     const stableApkUrl = configs.find(c => c.key === 'LATEST_APK_URL')?.value || null;
@@ -75,6 +75,9 @@ export async function POST(req: NextRequest) {
     const pollInterval = parseInt(configs.find(c => c.key === 'FLUSSONIC_POLL_INTERVAL')?.value || '10', 10);
     const emergencyActive = configs.find(c => c.key === 'EMERGENCY_ACTIVE')?.value || 'false';
     const emergencyMessage = configs.find(c => c.key === 'EMERGENCY_MESSAGE')?.value || '';
+    const emergencyBackgroundColor = configs.find(c => c.key === 'EMERGENCY_BG_COLOR')?.value || '#7f1d1d';
+    const emergencyTitleColor = configs.find(c => c.key === 'EMERGENCY_TITLE_COLOR')?.value || '#ef4444';
+    const emergencyMessageColor = configs.find(c => c.key === 'EMERGENCY_MESSAGE_COLOR')?.value || '#ffffff';
     const primaryApiUrl = configs.find(c => c.key === 'PRIMARY_API_URL')?.value || null;
     const secondaryApiUrl = configs.find(c => c.key === 'SECONDARY_API_URL')?.value || null;
 
@@ -89,6 +92,9 @@ export async function POST(req: NextRequest) {
       pollInterval,
       emergency: emergencyActive === 'true',
       emergencyMessage,
+      emergencyBackgroundColor,
+      emergencyTitleColor,
+      emergencyMessageColor,
       primaryApiUrl,
       secondaryApiUrl,
       screenshotRequested: authorizedDevice.screenshot_requested,

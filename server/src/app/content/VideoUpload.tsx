@@ -2,48 +2,63 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, X, FileVideo, Trash2, RefreshCw, Image as ImageIcon, GripVertical, Play, Save } from "lucide-react";
+import Image from "next/image";
+import { Upload, X, FileVideo, Trash2, RefreshCw, Image as ImageIcon, GripVertical, Play, Save, CheckCircle2, AlertCircle } from "lucide-react";
 import { deleteVideo, reorderVideos, updateImageDuration } from "./actions";
 
 export function VideoUpload() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<Array<{ file: File; progress: number; status: 'waiting' | 'uploading' | 'done' | 'error'; error?: string }>>([]);
   const [displayDuration, setDisplayDuration] = useState(10);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isImage = file?.type?.startsWith('image/') || false;
+  const addFiles = (incoming: FileList | File[]) => {
+    const accepted = Array.from(incoming).filter(file => /\.(mp4|jpe?g|png|webp)$/i.test(file.name));
+    setFiles(current => [...current, ...accepted.map(file => ({ file, progress: 0, status: 'waiting' as const }))]);
+  };
+
+  const uploadOne = (item: typeof files[number], index: number) => new Promise<boolean>((resolve) => {
+    const formData = new FormData();
+    formData.append("file", item.file);
+    if (item.file.type.startsWith('image/')) formData.append("display_duration", displayDuration.toString());
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/admin/videos");
+    xhr.upload.onprogress = event => {
+      if (!event.lengthComputable) return;
+      setFiles(current => current.map((entry, i) => i === index ? { ...entry, progress: Math.round(event.loaded * 100 / event.total), status: 'uploading' } : entry));
+    };
+    xhr.onload = () => {
+      let message = "Error de subida";
+      try { message = JSON.parse(xhr.responseText)?.error || message; } catch {}
+      setFiles(current => current.map((entry, i) => i === index ? (xhr.status >= 200 && xhr.status < 300
+        ? { ...entry, progress: 100, status: 'done' }
+        : { ...entry, status: 'error', error: message }) : entry));
+      resolve(xhr.status >= 200 && xhr.status < 300);
+    };
+    xhr.onerror = () => {
+      setFiles(current => current.map((entry, i) => i === index ? { ...entry, status: 'error', error: 'Error de conexión' } : entry));
+      resolve(false);
+    };
+    xhr.send(formData);
+  });
 
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
-    if (!file) return;
+    if (files.length === 0) return;
 
     setLoading(true);
     setError(null);
 
-    const formData = new FormData();
-    formData.append("file", file);
-    if (isImage) {
-      formData.append("display_duration", displayDuration.toString());
-    }
-
     try {
-      const res = await fetch("/api/admin/videos", {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Error de subida");
+      let failed = 0;
+      for (let index = 0; index < files.length; index++) {
+        if (files[index].status !== 'done' && !(await uploadOne(files[index], index))) failed++;
       }
-
-      setIsOpen(false);
-      setFile(null);
       router.refresh();
-      window.location.reload();
+      if (failed === 0) setTimeout(() => { setIsOpen(false); setFiles([]); }, 700);
+      else setError(`${failed} archivo(s) no pudieron subirse. Podés reintentarlos.`);
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "Error de subida");
     } finally {
@@ -63,7 +78,7 @@ export function VideoUpload() {
 
       {isOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-background border border-border rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
+          <div className="bg-background border border-border rounded-2xl w-full max-w-xl p-6 shadow-2xl relative">
             <button 
               onClick={() => setIsOpen(false)}
               className="absolute top-4 right-4 text-muted hover:text-white"
@@ -73,32 +88,27 @@ export function VideoUpload() {
             <h2 className="text-xl font-bold text-white mb-6">Subir Contenido</h2>
             
             <form onSubmit={handleUpload} className="space-y-4">
-              <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/50 transition-colors">
+              <div
+                className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/50 transition-colors"
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
+              >
                 <input
                   type="file"
+                  multiple
                   accept="video/mp4,image/jpeg,image/png,image/webp"
                   className="hidden"
                   id="video-upload"
-                  onChange={(e) => setFile(e.target.files?.[0] || null)}
+                  onChange={(e) => e.target.files && addFiles(e.target.files)}
                 />
                 <label htmlFor="video-upload" className="cursor-pointer flex flex-col items-center">
-                  {isImage ? (
-                    <ImageIcon className="h-12 w-12 mb-3 text-purple-400" />
-                  ) : (
-                    <FileVideo className={`h-12 w-12 mb-3 ${file ? 'text-primary' : 'text-muted'}`} />
-                  )}
-                  {file ? (
-                    <p className="text-white font-medium">{file.name}</p>
-                  ) : (
-                    <>
-                      <p className="text-white font-medium">Click para seleccionar archivo</p>
-                      <p className="text-sm text-muted mt-1">Videos (.mp4) o Imágenes (.jpg, .png, .webp)</p>
-                    </>
-                  )}
+                  <Upload className="h-12 w-12 mb-3 text-primary" />
+                  <p className="text-white font-medium">Arrastrá archivos aquí o hacé clic para seleccionarlos</p>
+                  <p className="text-sm text-muted mt-1">Podés elegir varios MP4, JPG, PNG o WebP</p>
                 </label>
               </div>
 
-              {isImage && (
+              {files.some(item => item.file.type.startsWith('image/')) && (
                 <div className="bg-surface-hover/50 rounded-xl p-4 border border-border">
                   <label className="block text-sm text-muted mb-2">
                     Duración en pantalla (segundos):
@@ -114,6 +124,19 @@ export function VideoUpload() {
                 </div>
               )}
 
+              {files.length > 0 && <div className="space-y-2 max-h-52 overflow-y-auto">
+                {files.map((item, index) => <div key={`${item.file.name}-${index}`} className="border border-border rounded-lg p-3">
+                  <div className="flex items-center gap-2 text-sm">
+                    {item.status === 'done' ? <CheckCircle2 className="h-4 w-4 text-primary" /> : item.status === 'error' ? <AlertCircle className="h-4 w-4 text-danger" /> : <FileVideo className="h-4 w-4 text-muted" />}
+                    <span className="text-white truncate flex-1">{item.file.name}</span>
+                    <span className="text-xs text-muted">{item.status === 'waiting' ? 'Esperando' : `${item.progress}%`}</span>
+                    {!loading && <button type="button" onClick={() => setFiles(current => current.filter((_, i) => i !== index))}><X className="h-4 w-4 text-muted" /></button>}
+                  </div>
+                  <div className="h-1 bg-black/30 rounded mt-2"><div className={`h-1 rounded ${item.status === 'error' ? 'bg-danger' : 'bg-primary'}`} style={{ width: `${item.progress}%` }} /></div>
+                  {item.error && <div className="text-xs text-danger mt-1">{item.error}</div>}
+                </div>)}
+              </div>}
+
               {error && <p className="text-danger border border-danger/20 bg-danger/10 p-2 rounded-lg text-sm">{error}</p>}
 
               <div className="pt-4 flex justify-end gap-3">
@@ -127,11 +150,11 @@ export function VideoUpload() {
                 </button>
                 <button
                   type="submit"
-                  disabled={loading || !file}
+                  disabled={loading || files.length === 0}
                   className="px-4 py-2 rounded-lg font-medium text-white bg-primary hover:bg-primary-hover transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 flex items-center gap-2"
                 >
                   {loading && <RefreshCw className="h-4 w-4 animate-spin" />}
-                  {loading ? "Subiendo..." : "Subir e Insertar"}
+                  {loading ? "Subiendo cola..." : `Subir ${files.length || ''} archivo${files.length === 1 ? '' : 's'}`}
                 </button>
               </div>
             </form>
@@ -142,15 +165,58 @@ export function VideoUpload() {
   );
 }
 
+export function StandbyUpload({ configured }: { configured: boolean }) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const upload = async (file?: File) => {
+    if (!file) return;
+    setLoading(true);
+    setMessage(null);
+    const data = new FormData();
+    data.append('file', file);
+    try {
+      const response = await fetch('/api/standby', { method: 'POST', body: data });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'No se pudo guardar');
+      setMessage('Imagen de espera guardada.');
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo guardar');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return <div className="glass rounded-2xl border border-border p-5 mb-8 flex flex-col md:flex-row items-center gap-5">
+    <div className="w-44 h-24 bg-black rounded-lg border border-border overflow-hidden flex items-center justify-center">
+      {configured ? <Image src="/api/standby" alt="Pantalla de espera" width={176} height={96} unoptimized className="w-full h-full object-contain" /> : <span className="text-xs text-muted text-center px-2">Imagen institucional predeterminada</span>}
+    </div>
+    <div className="flex-1">
+      <h2 className="font-bold text-white">Pantalla de espera</h2>
+      <p className="text-sm text-muted mt-1">Se muestra cuando no hay contenido o mientras el primer archivo se descarga.</p>
+      {message && <p className="text-sm text-primary mt-2">{message}</p>}
+    </div>
+    <label className="cursor-pointer px-4 py-2 rounded-lg bg-surface-hover border border-border text-white hover:border-primary">
+      {loading ? 'Guardando…' : configured ? 'Reemplazar imagen' : 'Subir imagen'}
+      <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={loading} onChange={e => upload(e.target.files?.[0])} />
+    </label>
+  </div>;
+}
+
 export function DeleteVideoButton({ id }: { id: string }) {
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
   return (
     <button
       onClick={async () => {
         if(confirm("¿Eliminar este contenido? Se borrará del disco y se actualizará el Manifest automáticamente.")) {
           setLoading(true);
-          await deleteVideo(id);
+          const result = await deleteVideo(id);
+          if (result?.error) alert(result.error);
+          router.refresh();
         }
       }}
       disabled={loading}
@@ -214,6 +280,7 @@ export function ReorderableTable({ videos }: { videos: SortableVideo[] }) {
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+
 
   const handleDragStart = (idx: number) => {
     setDraggedIdx(idx);

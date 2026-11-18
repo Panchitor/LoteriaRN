@@ -5,9 +5,12 @@ import { toggleEmergency } from "./actions";
 import { AlertTriangle, Power } from "lucide-react";
 import { AutoRefresh } from "@/components/AutoRefresh";
 
-export function EmergencyClient({ initialState }: { initialState: { isActive: boolean, message: string } }) {
+export function EmergencyClient({ initialState }: { initialState: { isActive: boolean, message: string, backgroundColor: string, titleColor: string, messageColor: string } }) {
   const [isActive, setIsActive] = useState(initialState.isActive);
   const [message, setMessage] = useState(initialState.message);
+  const [backgroundColor, setBackgroundColor] = useState(initialState.backgroundColor);
+  const [titleColor, setTitleColor] = useState(initialState.titleColor);
+  const [messageColor, setMessageColor] = useState(initialState.messageColor);
   const [loading, setLoading] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [pendingState, setPendingState] = useState(false);
@@ -22,7 +25,7 @@ export function EmergencyClient({ initialState }: { initialState: { isActive: bo
     setShowConfirm(false);
     setLoading(true);
     try {
-      await toggleEmergency(pendingState, message);
+      await toggleEmergency(pendingState, message, { backgroundColor, titleColor, messageColor });
       setIsActive(pendingState);
     } catch (e) {
       console.error(e);
@@ -67,6 +70,22 @@ export function EmergencyClient({ initialState }: { initialState: { isActive: bo
               disabled={loading || isActive}
             />
             {isActive && <p className="text-xs text-muted mt-2">Desactiva la emergencia para cambiar el mensaje.</p>}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+            {[
+              ['Fondo', backgroundColor, setBackgroundColor],
+              ['Título EMERGENCIA', titleColor, setTitleColor],
+              ['Mensaje', messageColor, setMessageColor],
+            ].map(([label, value, setter]) => (
+              <label key={label as string} className="text-xs text-muted">
+                {label as string}
+                <input type="color" value={value as string} onChange={e => (setter as (value: string) => void)(e.target.value)} disabled={loading || isActive} className="mt-1 w-full h-10 rounded bg-transparent border border-border" />
+              </label>
+            ))}
+          </div>
+          <div className="mt-4 rounded-xl p-5 text-center" style={{ backgroundColor }}>
+            <div className="text-2xl font-black" style={{ color: titleColor }}>EMERGENCIA</div>
+            <div className="mt-2" style={{ color: messageColor }}>{message || 'Mensaje de emergencia'}</div>
           </div>
         </div>
 

@@ -12,15 +12,17 @@ export const dynamic = "force-dynamic";
 const GB = 1024 * 1024 * 1024;
 
 export default async function DashboardPage() {
-  const [devices, videos, liveEvent, latestVersionConfig] = await Promise.all([
+  const [devices, videos, liveEvent, versionConfigs] = await Promise.all([
     prisma.device.findMany({ include: { agency: true }, orderBy: { last_seen: "desc" } }),
     prisma.video.findMany({ orderBy: { order: "asc" } }),
     prisma.liveEvent.findFirst(),
-    prisma.systemConfig.findUnique({ where: { key: "LATEST_APK_VERSION" } }),
+    prisma.systemConfig.findMany({ where: { key: { in: ["LATEST_APK_VERSION", "PILOT_APK_VERSION"] } } }),
   ]);
 
   const now = Date.now();
-  const latestVersion = latestVersionConfig?.value || "Sin definir";
+  const latestVersion = versionConfigs.find(c => c.key === "LATEST_APK_VERSION")?.value || "Sin definir";
+  const pilotVersion = versionConfigs.find(c => c.key === "PILOT_APK_VERSION")?.value;
+  const expectedVersion = (device: { update_channel: string }) => device.update_channel === "PILOT" && pilotVersion ? pilotVersion : latestVersion;
   const terminals = devices.map(device => {
     const ageSeconds = (now - device.last_seen.getTime()) / 1000;
     const linked = Boolean(device.installation_id && !device.revoked_at);
@@ -36,7 +38,7 @@ export default async function DashboardPage() {
   const inactive = terminals.filter(d => d.operationalState === "inactive");
   const playbackErrors = linked.filter(d => d.playback_status === "error");
   const lowStorage = online.filter(d => d.free_space !== null && Number(d.free_space) < 2 * GB);
-  const outdated = linked.filter(d => d.app_version && latestVersion !== "Sin definir" && d.app_version !== latestVersion);
+  const outdated = linked.filter(d => d.app_version && expectedVersion(d) !== "Sin definir" && d.app_version !== expectedVersion(d));
   const alertIds = new Set([...delayed, ...offline, ...playbackErrors, ...lowStorage, ...outdated].map(d => d.id));
   const healthPercent = linked.length ? Math.round((online.length / linked.length) * 100) : 100;
 
@@ -137,7 +139,7 @@ export default async function DashboardPage() {
                   <td className="py-4 font-semibold"><Link href={`/monitoring/${device.id}`} className="text-white hover:text-primary hover:underline">Ag. {device.agency.number}{device.agency.subagency_number ? ` / Sub. ${device.agency.subagency_number}` : ""} · TV {device.tv_number || "?"}</Link></td>
                   <td><Link href={`/monitoring/${device.id}`} className="text-muted hover:text-white hover:underline">{device.agency.city || "Sin ciudad"}</Link></td>
                   <td className="capitalize"><Link href={`/monitoring/${device.id}`} className="text-muted hover:text-white hover:underline">{device.playback_status === "live" ? "Vivo" : ["offline", "playing"].includes(device.playback_status || "") ? "Videos" : device.playback_status === "error" ? "Error" : "Sin datos"}</Link></td>
-                  <td><Link href="/updates" className={`${device.app_version === latestVersion ? "text-primary" : "text-amber-300"} hover:underline`}>{device.app_version || "—"}</Link></td>
+                  <td><Link href="/updates" className={`${device.app_version === expectedVersion(device) ? "text-primary" : "text-amber-300"} hover:underline`}>{device.app_version || "—"}</Link></td>
                   <td className="text-muted">{device.free_space !== null ? `${(Number(device.free_space) / GB).toFixed(1)} GB` : "—"}</td>
                   <td className="text-muted">{formatElapsed(device.ageSeconds)}</td>
                   <td className="text-right"><Link href={`/monitoring/${device.id}`}><StatusBadge state={device.operationalState} /></Link></td>

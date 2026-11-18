@@ -39,6 +39,12 @@ interface ManifestVideo {
   display_duration?: number;
 }
 
+interface StandbyImage {
+  url: string;
+  filename: string;
+  hash_sha256?: string | null;
+}
+
 function isVersionNewer(latest: string, current: string): boolean {
   const parse = (v: string) => v.split('.').map(n => parseInt(n, 10) || 0);
   const lParts = parse(latest);
@@ -72,7 +78,13 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
   const [liveStatus, setLiveStatus] = useState<LiveStatus>({ live: false, url: '' });
   const [playlist, setPlaylist] = useState<ManifestVideo[]>([]);
   const [tickers, setTickers] = useState<TickerItem[]>([]);
-  const [emergency, setEmergency] = useState<{ active: boolean; message: string }>({ active: false, message: '' });
+  const [emergency, setEmergency] = useState({
+    active: false,
+    message: '',
+    backgroundColor: '#7f1d1d',
+    titleColor: '#ef4444',
+    messageColor: '#ffffff',
+  });
   const [localFiles, setLocalFiles] = useState<Record<string, string>>({});
   const [currentOfflineIndex, setCurrentOfflineIndex] = useState(0);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -82,6 +94,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
   const [pollIntervalMs, setPollIntervalMs] = useState(10000);
   const [networkState, setNetworkState] = useState<Network.NetworkState | null>(null);
   const [serverSource, setServerSource] = useState<ServerSource>('primary');
+  const [standbyUri, setStandbyUri] = useState<string | null>(null);
   
   const [liveRetryKey, setLiveRetryKey] = useState(0);
   const [offlineRetryKey, setOfflineRetryKey] = useState(0);
@@ -93,6 +106,9 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
   const remoteCommandBusyRef = useRef(false);
   const updateInProgressRef = useRef(false);
   const updateProgressRef = useRef(0);
+  const manifestPlaylistRef = useRef<ManifestVideo[]>([]);
+  const manifestLoadedRef = useRef(false);
+  const currentFilenameRef = useRef<string | null>(null);
   const deviceInfoRef = useRef<{ androidVersion?: string; deviceModel?: string; deviceSerial?: string }>({});
 
   const loopVideoRef = useRef<Video>(null);
@@ -325,7 +341,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
       for (const file of cachedFiles) {
         // A standby manifest can be intentionally delayed. Never let it delete
         // newer content that was already downloaded from the primary server.
-        if (source === 'primary' && !manifestFilenames.includes(file)) {
+        if (source === 'primary' && !manifestFilenames.includes(file) && file !== currentFilenameRef.current) {
            await FileSystem.deleteAsync(VIDEO_DIR + file, { idempotent: true });
            delete newLocalFiles[file];
            hasChanges = true;
@@ -381,6 +397,35 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
       sendRemoteLog('error', `Error sincronizando contenido: ${e?.message}`);
     } finally {
       setIsDownloadingVideos(false);
+    }
+  };
+
+  const syncStandby = async (standby: StandbyImage | null, source: ServerSource) => {
+    if (!standby?.url) return;
+    try {
+      const extension = standby.filename.split('.').pop()?.toLowerCase() || 'png';
+      const target = `${FileSystem.documentDirectory}standby.${extension}`;
+      const current = await FileSystem.getInfoAsync(target);
+      if (current.exists && standby.hash_sha256 && SilentInstall?.sha256File) {
+        const hash = await SilentInstall.sha256File(target.replace('file://', ''));
+        if (hash?.toLowerCase() === standby.hash_sha256.toLowerCase()) {
+          setStandbyUri(target);
+          return;
+        }
+      }
+      const remoteUrl = await getApiUrl(source, standby.url);
+      const temporary = `${target}.download`;
+      await FileSystem.deleteAsync(temporary, { idempotent: true });
+      await FileSystem.downloadAsync(remoteUrl, temporary);
+      if (standby.hash_sha256 && SilentInstall?.sha256File) {
+        const hash = await SilentInstall.sha256File(temporary.replace('file://', ''));
+        if (hash?.toLowerCase() !== standby.hash_sha256.toLowerCase()) throw new Error('SHA-256 inválido');
+      }
+      await FileSystem.deleteAsync(target, { idempotent: true });
+      await FileSystem.moveAsync({ from: temporary, to: target });
+      setStandbyUri(target);
+    } catch (error: any) {
+      sendRemoteLog('warn', `No se pudo actualizar la imagen de espera: ${error?.message}`);
     }
   };
 
@@ -465,7 +510,10 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
           if (dataLive.emergency !== undefined) {
             setEmergency({
               active: dataLive.emergency,
-              message: dataLive.emergencyMessage || ''
+              message: dataLive.emergencyMessage || '',
+              backgroundColor: dataLive.emergencyBackgroundColor || '#7f1d1d',
+              titleColor: dataLive.emergencyTitleColor || '#ef4444',
+              messageColor: dataLive.emergencyMessageColor || '#ffffff',
             });
           }
 
@@ -530,9 +578,21 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
                setTickers(dataManifest.tickers);
             }
             if (dataManifest.videos) {
-               setPlaylist(dataManifest.videos);
+               const nextPlaylist = dataManifest.videos as ManifestVideo[];
+               manifestLoadedRef.current = true;
+               manifestPlaylistRef.current = nextPlaylist;
+               setPlaylist(current => {
+                 const playing = currentFilenameRef.current;
+                 const activeItem = playing ? current.find(item => item.filename === playing) : undefined;
+                 // Keep the current playlist shape until the active item finishes;
+                 // changing indices here could cut it even if its file is retained.
+                 return activeItem && !nextPlaylist.some(item => item.filename === playing)
+                   ? current
+                   : nextPlaylist;
+               });
                syncVideos(dataManifest.videos, manifestResult.source);
             }
+            if (dataManifest.standby) syncStandby(dataManifest.standby, manifestResult.source);
           }
         } catch (_) {}
 
@@ -613,6 +673,12 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
     const timer = setTimeout(() => {
       sendPlaybackStat(currentItem.filename, 'end', true);
       fadeOutAndNext(() => {
+        const latestPlaylist = manifestPlaylistRef.current;
+        if (manifestLoadedRef.current && !latestPlaylist.some(item => item.filename === currentItem.filename)) {
+          setPlaylist(latestPlaylist);
+          setCurrentOfflineIndex(0);
+          return;
+        }
         setCurrentOfflineIndex((prev) => (prev + 1) % playlist.length);
       });
     }, Math.max(0, durationMs - 600));
@@ -635,6 +701,13 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
           sendPlaybackStat(currentItem.filename, 'end', true);
         }
         fadeOutAndNext(async () => {
+          const latestPlaylist = manifestPlaylistRef.current;
+          const wasRemoved = manifestLoadedRef.current && currentItem && !latestPlaylist.some(item => item.filename === currentItem.filename);
+          if (wasRemoved) {
+            setPlaylist(latestPlaylist);
+            setCurrentOfflineIndex(0);
+            return;
+          }
           if (playlist.length > 1) {
             const nextIndex = (currentOfflineIndex + 1) % playlist.length;
             setCurrentOfflineIndex(nextIndex);
@@ -670,6 +743,10 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
   const currentVideoFilename = currentItem?.filename;
   const localUri = currentVideoFilename ? localFiles[currentVideoFilename] : null;
   const offlineSrc = localUri ? { uri: localUri } : null;
+
+  useEffect(() => {
+    currentFilenameRef.current = currentVideoFilename || null;
+  }, [currentVideoFilename]);
 
   useEffect(() => {
     lastPositionRef.current = 0;
@@ -765,11 +842,11 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
   // EMERGENCY SCREEN
   if (emergency.active) {
     return (
-      <View style={[styles.container, { backgroundColor: '#7f1d1d', justifyContent: 'center', alignItems: 'center', padding: 40 }]}>
-        <Text style={{ color: '#ef4444', fontSize: 72, fontWeight: '900', marginBottom: 20 }}>
+      <View style={[styles.container, { backgroundColor: emergency.backgroundColor, justifyContent: 'center', alignItems: 'center', padding: 40 }]}>
+        <Text style={{ color: emergency.titleColor, fontSize: 72, fontWeight: '900', marginBottom: 20 }}>
           🚨 EMERGENCIA
         </Text>
-        <Text style={{ color: 'white', fontSize: 36, textAlign: 'center', fontWeight: 'bold', lineHeight: 50 }}>
+        <Text style={{ color: emergency.messageColor, fontSize: 36, textAlign: 'center', fontWeight: 'bold', lineHeight: 50 }}>
           {emergency.message || 'Atención: Mensaje de Emergencia en Pantalla'}
         </Text>
       </View>
@@ -801,7 +878,8 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
                useNativeControls={false}
                resizeMode={ResizeMode.CONTAIN}
                isLooping={playlist.length === 1}
-               shouldPlay={!isLiveActive || !isLiveReady} 
+               shouldPlay={!isLiveActive}
+               isMuted={isLiveActive}
                onPlaybackStatusUpdate={status => onOfflineVideoEnd(status)}
                onError={(err) => {
                  sendRemoteLog('error', `Error cargando video local (${currentItem?.filename}): ${JSON.stringify(err)}`);
@@ -822,10 +900,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
           </Animated.View>
          ) : (
            <View style={styles.emptyPlaylist}>
-             <ActivityIndicator color="#ffffff" />
-             <Text style={styles.emptyText}>
-               {playlist.length > 0 ? 'Descargando contenido institucionales...' : 'Esperando Institucional de Panel...'}
-             </Text>
+             <Image source={standbyUri ? { uri: standbyUri } : require('../../assets/logo_official.png')} style={styles.standbyImage} resizeMode="contain" />
            </View>
          )}
       </View>
@@ -938,6 +1013,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000000' },
   playerWrapper: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000000' },
   emptyPlaylist: { justifyContent: 'center', alignItems: 'center' },
+  standbyImage: { width: '70%', height: '70%' },
   emptyText: { color: '#64748b', marginTop: 10 },
   liveTag: { position: 'absolute', top: 30, right: 30, backgroundColor: 'rgba(220, 38, 38, 0.8)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
   liveTagText: { color: 'white', fontWeight: 'bold', fontSize: 14 },

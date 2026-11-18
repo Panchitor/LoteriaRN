@@ -12,6 +12,11 @@ export async function GET() {
       where: { is_active: true },
       orderBy: { created_at: "asc" },
     });
+    const standbyConfigs = await prisma.systemConfig.findMany({
+      where: { key: { in: ["STANDBY_IMAGE_FILENAME", "STANDBY_IMAGE_SHA256"] } },
+    });
+    const standbyFilename = standbyConfigs.find(c => c.key === "STANDBY_IMAGE_FILENAME")?.value;
+    const standbySha256 = standbyConfigs.find(c => c.key === "STANDBY_IMAGE_SHA256")?.value;
 
     const parsedContent = videosRaw
       .filter(v => Number(v.size_bytes) > 0)
@@ -37,7 +42,8 @@ export async function GET() {
     return NextResponse.json({
       version: versionHash,
       videos: parsedContent,
-      tickers: parsedTickers
+      tickers: parsedTickers,
+      standby: standbyFilename ? { url: "/api/standby", filename: standbyFilename, hash_sha256: standbySha256 || null } : null,
     }, {
       headers: {
         'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',

@@ -1,10 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import ScheduleClient from "./ScheduleClient";
 import { Calendar } from "lucide-react";
+import { requireAdmin } from "@/lib/authorization";
 
 export const dynamic = 'force-dynamic';
 
 export default async function SchedulePage() {
+  await requireAdmin();
   const schedules = await prisma.schedule.findMany({
     include: {
       group: {

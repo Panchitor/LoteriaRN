@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { VideoUpload, ReorderableTable } from "./VideoUpload";
+import { VideoUpload, ReorderableTable, StandbyUpload } from "./VideoUpload";
 import { PlaySquare, Database, HardDrive, CheckCircle2, Image as ImageIcon } from "lucide-react";
 import { AutoRefresh } from "@/components/AutoRefresh";
 
@@ -9,6 +9,7 @@ export default async function ContentPage() {
   const videos = await prisma.video.findMany({
     orderBy: [{ order: "asc" }, { created_at: "asc" }],
   });
+  const standby = await prisma.systemConfig.findUnique({ where: { key: "STANDBY_IMAGE_FILENAME" } });
 
   const manifestDisplay = videos.length > 0
     ? new Intl.DateTimeFormat('es-AR', {
@@ -71,12 +72,14 @@ export default async function ContentPage() {
         </div>
       </div>
 
+      <StandbyUpload configured={Boolean(standby?.value)} />
+
       <div className="glass rounded-2xl border border-border overflow-hidden">
         <div className="bg-surface-hover/80 px-6 py-4 border-b border-border flex items-center gap-2">
           <CheckCircle2 className="h-5 w-5 text-primary" />
           <h2 className="text-sm font-semibold text-white">Orden de Reproducción (arrastrá para reordenar)</h2>
         </div>
-        <ReorderableTable videos={serializedVideos} />
+        <ReorderableTable key={videos.map(video => video.id).join(':')} videos={serializedVideos} />
       </div>
     </div>
   );
