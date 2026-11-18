@@ -18,7 +18,7 @@ export async function proxy(request: NextRequest) {
 
   const publicRoutes = [
     '/login', '/api/health', '/api/manifest', '/api/telemetry', '/api/register',
-    '/api/videos', '/api/logs', '/api/stats', '/api/device-control', '/apk',
+    '/api/videos', '/api/standby', '/api/logs', '/api/stats', '/api/device-control', '/apk',
     '/downloads', '/screenshots',
   ]
   if (publicRoutes.some(route => pathname.startsWith(route))) {
@@ -39,7 +39,7 @@ export async function proxy(request: NextRequest) {
     return response
   }
 
-  const adminRoutes = ['/users', '/settings', '/live', '/api/admin']
+  const adminRoutes = ['/users', '/settings', '/live', '/emergency', '/groups', '/schedule', '/api/admin']
   if (user.role !== 'ADMIN' && adminRoutes.some(route => pathname.startsWith(route))) {
     return NextResponse.redirect(new URL('/', request.url))
   }

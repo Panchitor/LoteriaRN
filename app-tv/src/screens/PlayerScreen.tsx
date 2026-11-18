@@ -328,6 +328,23 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
     }
   };
 
+  const removeCachedFileWhenReleased = (filename: string, delayMs = 1500) => {
+    setTimeout(async () => {
+      if (currentFilenameRef.current === filename) return;
+      try {
+        await FileSystem.deleteAsync(VIDEO_DIR + filename, { idempotent: true });
+        setLocalFiles(current => {
+          if (!current[filename]) return current;
+          const next = { ...current };
+          delete next[filename];
+          return next;
+        });
+      } catch (error: any) {
+        sendRemoteLog('warn', `No se pudo liberar contenido retirado (${filename}): ${error?.message}`);
+      }
+    }, delayMs);
+  };
+
   const syncVideos = async (manifestVideos: ManifestVideo[], source: ServerSource = 'primary') => {
     if (isDownloadingVideos || isUpdating) return;
     setIsDownloadingVideos(true);
@@ -342,9 +359,9 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
         // A standby manifest can be intentionally delayed. Never let it delete
         // newer content that was already downloaded from the primary server.
         if (source === 'primary' && !manifestFilenames.includes(file) && file !== currentFilenameRef.current) {
-           await FileSystem.deleteAsync(VIDEO_DIR + file, { idempotent: true });
-           delete newLocalFiles[file];
-           hasChanges = true;
+           // The native decoder can still hold the previous file briefly after
+           // React changes item. Delete only after it is no longer active.
+           removeCachedFileWhenReleased(file);
         }
       }
 
@@ -675,8 +692,10 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
       fadeOutAndNext(() => {
         const latestPlaylist = manifestPlaylistRef.current;
         if (manifestLoadedRef.current && !latestPlaylist.some(item => item.filename === currentItem.filename)) {
+          const retiredFilename = currentItem.filename;
           setPlaylist(latestPlaylist);
           setCurrentOfflineIndex(0);
+          removeCachedFileWhenReleased(retiredFilename, 2500);
           return;
         }
         setCurrentOfflineIndex((prev) => (prev + 1) % playlist.length);
@@ -704,8 +723,10 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
           const latestPlaylist = manifestPlaylistRef.current;
           const wasRemoved = manifestLoadedRef.current && currentItem && !latestPlaylist.some(item => item.filename === currentItem.filename);
           if (wasRemoved) {
+            const retiredFilename = currentItem.filename;
             setPlaylist(latestPlaylist);
             setCurrentOfflineIndex(0);
+            removeCachedFileWhenReleased(retiredFilename, 2500);
             return;
           }
           if (playlist.length > 1) {
