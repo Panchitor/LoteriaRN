@@ -424,7 +424,10 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
     if (!standby?.url) return;
     try {
       const extension = standby.filename.split('.').pop()?.toLowerCase() || 'png';
-      const target = `${FileSystem.documentDirectory}standby.${extension}`;
+      const cacheKey = standby.hash_sha256?.toLowerCase() || Date.now().toString();
+      // Force a new URI for each revision. Android caches decoded images by URI
+      // even when the file at that path is replaced.
+      const target = `${FileSystem.documentDirectory}standby-${cacheKey}.${extension}`;
       const current = await FileSystem.getInfoAsync(target);
       if (current.exists && standby.hash_sha256 && SilentInstall?.sha256File) {
         const hash = await SilentInstall.sha256File(target.replace('file://', ''));
@@ -444,6 +447,12 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
       }
       await FileSystem.deleteAsync(target, { idempotent: true });
       await FileSystem.moveAsync({ from: temporary, to: target });
+      const documentFiles = await FileSystem.readDirectoryAsync(FileSystem.documentDirectory!);
+      for (const filename of documentFiles) {
+        if (filename.startsWith('standby-') && `${FileSystem.documentDirectory}${filename}` !== target) {
+          await FileSystem.deleteAsync(`${FileSystem.documentDirectory}${filename}`, { idempotent: true });
+        }
+      }
       standbyHashRef.current = standby.hash_sha256?.toLowerCase() || null;
       standbyLoadLoggedRef.current = false;
       setStandbyUri(target);
@@ -689,16 +698,18 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
 
   // Handle timer for image items
   useEffect(() => {
-    if (!isImageItem || liveStatus.live || emergency.active || playlist.length <= 1) return;
+    if (!isImageItem || liveStatus.live || emergency.active) return;
 
     const durationMs = (currentItem?.display_duration || 10) * 1000;
     sendPlaybackStat(currentItem.filename, 'start');
 
     const timer = setTimeout(() => {
       sendPlaybackStat(currentItem.filename, 'end', true);
+      const latestPlaylist = manifestPlaylistRef.current;
+      const wasRemoved = manifestLoadedRef.current && !latestPlaylist.some(item => item.filename === currentItem.filename);
+      if (!wasRemoved && playlist.length === 1) return;
       fadeOutAndNext(() => {
-        const latestPlaylist = manifestPlaylistRef.current;
-        if (manifestLoadedRef.current && !latestPlaylist.some(item => item.filename === currentItem.filename)) {
+        if (wasRemoved) {
           const retiredFilename = currentItem.filename;
           setPlaylist(latestPlaylist);
           setCurrentOfflineIndex(0);
