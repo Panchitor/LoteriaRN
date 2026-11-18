@@ -110,6 +110,10 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
   const manifestPlaylistRef = useRef<ManifestVideo[]>([]);
   const manifestLoadedRef = useRef(false);
   const currentFilenameRef = useRef<string | null>(null);
+  const currentItemRef = useRef<ManifestVideo | null>(null);
+  const imageStartedAtRef = useRef(Date.now());
+  const imageRetirementTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retiringImageRef = useRef<string | null>(null);
   const standbyHashRef = useRef<string | null>(null);
   const standbyLoadLoggedRef = useRef(false);
   const deviceInfoRef = useRef<{ androidVersion?: string; deviceModel?: string; deviceSerial?: string }>({});
@@ -614,6 +618,21 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
                const nextPlaylist = dataManifest.videos as ManifestVideo[];
                manifestLoadedRef.current = true;
                manifestPlaylistRef.current = nextPlaylist;
+               const activeItem = currentItemRef.current;
+               if (activeItem?.media_type === 'image' && !nextPlaylist.some(item => item.filename === activeItem.filename) && retiringImageRef.current !== activeItem.filename) {
+                 retiringImageRef.current = activeItem.filename;
+                 const elapsedMs = Date.now() - imageStartedAtRef.current;
+                 const remainingMs = Math.max(0, (activeItem.display_duration || 10) * 1000 - elapsedMs);
+                 if (imageRetirementTimerRef.current) clearTimeout(imageRetirementTimerRef.current);
+                 imageRetirementTimerRef.current = setTimeout(() => {
+                   if (currentFilenameRef.current !== activeItem.filename) return;
+                   setPlaylist(manifestPlaylistRef.current);
+                   setCurrentOfflineIndex(0);
+                   removeCachedFileWhenReleased(activeItem.filename, 2500);
+                   retiringImageRef.current = null;
+                   imageRetirementTimerRef.current = null;
+                 }, remainingMs);
+               }
                setPlaylist(current => {
                  const playing = currentFilenameRef.current;
                  const activeItem = playing ? current.find(item => item.filename === playing) : undefined;
@@ -785,7 +804,18 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
 
   useEffect(() => {
     currentFilenameRef.current = currentVideoFilename || null;
-  }, [currentVideoFilename]);
+    currentItemRef.current = currentItem || null;
+    if (isImageItem) imageStartedAtRef.current = Date.now();
+    if (retiringImageRef.current && retiringImageRef.current !== currentVideoFilename) {
+      if (imageRetirementTimerRef.current) clearTimeout(imageRetirementTimerRef.current);
+      imageRetirementTimerRef.current = null;
+      retiringImageRef.current = null;
+    }
+  }, [currentVideoFilename, currentItem, isImageItem]);
+
+  useEffect(() => () => {
+    if (imageRetirementTimerRef.current) clearTimeout(imageRetirementTimerRef.current);
+  }, []);
 
   useEffect(() => {
     lastPositionRef.current = 0;
