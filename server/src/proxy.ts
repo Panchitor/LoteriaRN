@@ -39,7 +39,7 @@ export async function proxy(request: NextRequest) {
     return response
   }
 
-  const adminRoutes = ['/users', '/settings', '/live', '/emergency', '/groups', '/schedule', '/api/admin']
+  const adminRoutes = ['/users', '/settings', '/live', '/emergency', '/groups', '/api/admin']
   if (user.role !== 'ADMIN' && adminRoutes.some(route => pathname.startsWith(route))) {
     return NextResponse.redirect(new URL('/', request.url))
   }

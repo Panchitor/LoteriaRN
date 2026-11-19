@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { saveConfigs } from "./actions";
-import { Save, Loader2 } from "lucide-react";
+import { Save, Loader2, Building2, CalendarClock } from "lucide-react";
 
 type Config = {
   key: string;
@@ -15,6 +15,8 @@ export function SettingsClient({ initialConfigs }: { initialConfigs: Config[] })
     { key: 'FLUSSONIC_POLL_INTERVAL', value: '5' },
     { key: 'PRIMARY_API_URL', value: 'https://loteriarn.patagonialive.media' },
     { key: 'SECONDARY_API_URL', value: '' },
+    { key: 'EDITOR_SHOW_AGENCIES', value: 'true' },
+    { key: 'EDITOR_SHOW_SCHEDULE', value: 'false' },
   ];
   const [configs, setConfigs] = useState<Config[]>(
     defaults.map(item => initialConfigs.find(config => config.key === item.key) || item)
@@ -34,6 +36,8 @@ export function SettingsClient({ initialConfigs }: { initialConfigs: Config[] })
     PRIMARY_API_URL: 'Servidor principal',
     SECONDARY_API_URL: 'Servidor de respaldo (futuro)',
   };
+  const textConfigs = configs.filter(config => !config.key.startsWith('EDITOR_SHOW_'));
+  const editorFeatureConfigs = configs.filter(config => config.key.startsWith('EDITOR_SHOW_'));
 
   const handleSave = async () => {
     setLoading(true);
@@ -58,8 +62,36 @@ export function SettingsClient({ initialConfigs }: { initialConfigs: Config[] })
         </div>
       )}
 
-      <div className="space-y-3">
-        {configs.map((config, index) => (
+      <section>
+        <h2 className="text-lg font-bold text-white">Opciones visibles para editores</h2>
+        <p className="mt-1 text-sm text-muted">El administrador siempre conserva acceso a todas las secciones.</p>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {editorFeatureConfigs.map(config => {
+            const enabled = config.value === 'true';
+            const isAgencies = config.key === 'EDITOR_SHOW_AGENCIES';
+            const Icon = isAgencies ? Building2 : CalendarClock;
+            return (
+              <button
+                type="button"
+                key={config.key}
+                onClick={() => handleUpdate(configs.findIndex(item => item.key === config.key), enabled ? 'false' : 'true')}
+                className={`flex items-center justify-between rounded-xl border p-4 text-left transition ${enabled ? 'border-primary/40 bg-primary/10' : 'border-border bg-background'}`}
+              >
+                <span className="flex items-center gap-3">
+                  <span className={`rounded-lg p-2 ${enabled ? 'bg-primary/20 text-primary' : 'bg-surface text-muted'}`}><Icon className="h-5 w-5" /></span>
+                  <span><strong className="block text-white">{isAgencies ? 'Agencias y TVs' : 'Horarios y Programación'}</strong><small className="text-muted">Visible en el menú del editor</small></span>
+                </span>
+                <span className={`rounded-full px-3 py-1 text-xs font-bold ${enabled ? 'bg-primary text-white' : 'bg-surface text-muted'}`}>{enabled ? 'ACTIVO' : 'OCULTO'}</span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <div className="space-y-3 border-t border-border pt-6">
+        {textConfigs.map((config) => {
+          const index = configs.findIndex(item => item.key === config.key);
+          return (
           <div key={config.key} className="flex gap-4 items-start">
             <div className="flex-1">
               <label className="text-sm font-semibold text-white mb-1 block">{labels[config.key]}</label>
@@ -72,7 +104,8 @@ export function SettingsClient({ initialConfigs }: { initialConfigs: Config[] })
               />
             </div>
           </div>
-        ))}
+          );
+        })}
         {configs.length === 0 && (
           <div className="text-center py-6 text-muted border border-dashed border-border rounded-lg">
             No hay configuraciones almacenadas. Agrega tu primera variable.

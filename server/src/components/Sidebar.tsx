@@ -5,25 +5,26 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, Tv, FileVideo, Settings, Activity, Users, LogOut, Download, FolderTree, Calendar, AlertTriangle, Type, ShieldAlert } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
+import type { EditorFeatureVisibility } from "@/lib/editorFeatures";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard, role: "EDITOR" },
-  { name: "Agencias y TVs", href: "/agencies", icon: Tv, role: "EDITOR" },
   { name: "Contenido", href: "/content", icon: FileVideo, role: "EDITOR" },
   { name: "Marquesina", href: "/ticker", icon: Type, role: "EDITOR" },
   { name: "Monitoreo Red", href: "/monitoring", icon: Activity, role: "EDITOR" },
   { name: "Alertas", href: "/alerts", icon: ShieldAlert, role: "EDITOR" },
+  { name: "Agencias y TVs", href: "/agencies", icon: Tv, role: "EDITOR", feature: "agencies" as const },
+  { name: "Programación", href: "/schedule", icon: Calendar, role: "EDITOR", feature: "schedule" as const },
 
   { name: "Transmisión LIVE", href: "/live", icon: Activity, role: "ADMIN" },
   { name: "Emergencia", href: "/emergency", icon: AlertTriangle, role: "ADMIN" },
   { name: "Actualizaciones", href: "/updates", icon: Download, role: "ADMIN" },
   { name: "Grupos", href: "/groups", icon: FolderTree, role: "ADMIN" },
-  { name: "Programación", href: "/schedule", icon: Calendar, role: "ADMIN" },
   { name: "Configuración", href: "/settings", icon: Settings, role: "ADMIN" },
   { name: "Usuarios", href: "/users", icon: Users, role: "ADMIN" },
 ];
 
-export default function Sidebar({ role, username }: { role?: string, username?: string }) {
+export default function Sidebar({ role, username, editorFeatures }: { role?: string, username?: string, editorFeatures: EditorFeatureVisibility }) {
   const pathname = usePathname();
 
   if (pathname === "/login" || !role) return null;
@@ -31,7 +32,9 @@ export default function Sidebar({ role, username }: { role?: string, username?: 
   // If role is EDITOR, filter out ADMIN routes. If ADMIN, show everything.
   const visibleNav = navigation.filter(item => {
     if (role === "ADMIN") return true;
-    return item.role !== "ADMIN";
+    if (item.role === "ADMIN") return false;
+    if ("feature" in item && item.feature) return editorFeatures[item.feature];
+    return true;
   });
 
   return (

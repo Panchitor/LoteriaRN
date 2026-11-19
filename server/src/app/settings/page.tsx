@@ -2,13 +2,14 @@ import { prisma } from "@/lib/prisma";
 import { SettingsClient } from "./SettingsClient";
 import { Settings as SettingsIcon } from "lucide-react";
 import { requireAdmin } from "@/lib/authorization";
+import { EDITOR_FEATURE_KEYS } from "@/lib/editorFeatures";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   await requireAdmin();
   const configs = await prisma.systemConfig.findMany({
-    where: { key: { in: ['FLUSSONIC_BASE_URL', 'FLUSSONIC_POLL_INTERVAL', 'PRIMARY_API_URL', 'SECONDARY_API_URL'] } },
+    where: { key: { in: ['FLUSSONIC_BASE_URL', 'FLUSSONIC_POLL_INTERVAL', 'PRIMARY_API_URL', 'SECONDARY_API_URL', ...Object.values(EDITOR_FEATURE_KEYS)] } },
     orderBy: { key: 'asc' }
   });
 

@@ -18,6 +18,7 @@ export async function saveConfigs(configs: { key: string; value: string }[]) {
       });
     }
     revalidatePath("/settings");
+    revalidatePath("/", "layout");
     return { success: true };
   } catch (error: unknown) {
     console.error("Error saving configs:", errorMessage(error));

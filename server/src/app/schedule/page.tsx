@@ -1,12 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import ScheduleClient from "./ScheduleClient";
 import { Calendar } from "lucide-react";
-import { requireAdmin } from "@/lib/authorization";
+import { requireEditorFeature } from "@/lib/authorization";
+import { EDITOR_FEATURE_DEFAULTS, EDITOR_FEATURE_KEYS } from "@/lib/editorFeatures";
 
 export const dynamic = 'force-dynamic';
 
 export default async function SchedulePage() {
-  await requireAdmin();
+  await requireEditorFeature(EDITOR_FEATURE_KEYS.schedule, EDITOR_FEATURE_DEFAULTS.schedule);
   const schedules = await prisma.schedule.findMany({
     include: {
       group: {

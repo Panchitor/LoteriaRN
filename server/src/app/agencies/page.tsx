@@ -3,10 +3,13 @@ import { AgencyForm, DeleteButton, DeviceActions } from "./AgencyForm";
 import { Tv, Activity } from "lucide-react";
 import { getDeviceOperationalState, operationalStateLabel } from "@/lib/deviceStatus";
 import Link from "next/link";
+import { EDITOR_FEATURE_DEFAULTS, EDITOR_FEATURE_KEYS } from "@/lib/editorFeatures";
+import { requireEditorFeature } from "@/lib/authorization";
 
 export const dynamic = "force-dynamic";
 
 export default async function AgenciesPage() {
+  await requireEditorFeature(EDITOR_FEATURE_KEYS.agencies, EDITOR_FEATURE_DEFAULTS.agencies);
   const agencies = await prisma.agency.findMany({
     include: {
       devices: true,
