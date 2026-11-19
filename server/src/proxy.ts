@@ -20,6 +20,7 @@ export async function proxy(request: NextRequest) {
     '/login', '/api/health', '/api/manifest', '/api/telemetry', '/api/register',
     '/api/videos', '/api/standby', '/api/logs', '/api/stats', '/api/device-control', '/apk',
     '/downloads', '/screenshots',
+    '/logo-loteria-rn.png',
   ]
   if (publicRoutes.some(route => pathname.startsWith(route))) {
     if (token && pathname.startsWith('/login')) {

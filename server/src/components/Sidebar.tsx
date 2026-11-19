@@ -41,8 +41,8 @@ export default function Sidebar({ role, username, editorFeatures }: { role?: str
     <div className="w-64 border-r border-border bg-background glass flex flex-col h-screen sticky top-0 overflow-hidden">
       <div className="p-6 flex items-center justify-center border-b border-border">
         <div className="flex flex-col items-center">
-          <div className="h-16 w-32 mb-2">
-            <Image src="/logo-loteria-rn.png" alt="Logo Lotería de Río Negro" width={128} height={64} className="w-full h-full object-contain" priority />
+          <div className="mb-2 h-16 w-44">
+            <Image src="/logo-loteria-rn.png" alt="Logo Lotería de Río Negro" width={389} height={80} className="h-full w-full object-contain" priority unoptimized />
           </div>
           <h1 className="text-xl font-bold tracking-tight text-white hidden">Lotería RN</h1>
           <p className="text-xs text-muted mb-1 mt-1">Gestor de Agencias</p>
