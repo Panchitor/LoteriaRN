@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "1.0.92",
+    [string]$Version = "1.0.93",
     [switch]$KeepBuildCache
 )
 

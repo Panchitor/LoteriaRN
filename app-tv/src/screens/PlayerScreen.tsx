@@ -101,6 +101,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
   const [offlineRetryKey, setOfflineRetryKey] = useState(0);
   const [liveHasError, setLiveHasError] = useState(false);
   const [isLiveReady, setIsLiveReady] = useState(false);
+  const [isLiveTransitionComplete, setIsLiveTransitionComplete] = useState(false);
   
   const lastAttemptedUpdateRef = useRef<string | null>(null);
   const missedLiveCountRef = useRef<number>(0);
@@ -171,14 +172,19 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
 
   const liveFadeIn = () => {
     setIsLiveReady(true);
+    setIsLiveTransitionComplete(false);
     Animated.timing(liveFadeAnim, {
       toValue: 1,
       duration: 600,
       useNativeDriver: true,
-    }).start();
+    }).start(({ finished }) => {
+      if (finished) setIsLiveTransitionComplete(true);
+    });
   };
 
   const liveFadeOut = (callback?: () => void) => {
+    // Resume local playback before the live layer disappears so fallback is seamless.
+    setIsLiveTransitionComplete(false);
     Animated.timing(liveFadeAnim, {
       toValue: 0,
       duration: 500,
@@ -702,6 +708,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
       liveFadeOut();
     } else {
       setIsLiveReady(false);
+      setIsLiveTransitionComplete(false);
       liveFadeAnim.setValue(0);
     }
   }, [liveStatus.live, liveStatus.url, liveHasError, liveRetryKey]);
@@ -965,8 +972,8 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
                useNativeControls={false}
                resizeMode={ResizeMode.CONTAIN}
                isLooping={playlist.length === 1}
-               shouldPlay={!isLiveActive}
-               isMuted={isLiveActive}
+               shouldPlay={!isLiveTransitionComplete}
+               isMuted={isLiveTransitionComplete}
                onPlaybackStatusUpdate={status => onOfflineVideoEnd(status)}
                onError={(err) => {
                  sendRemoteLog('error', `Error cargando video local (${currentItem?.filename}): ${JSON.stringify(err)}`);
@@ -1001,7 +1008,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
              useNativeControls={false}
              resizeMode={ResizeMode.CONTAIN}
              shouldPlay={isLiveActive} 
-             isMuted={false}
+             isMuted={!isLiveTransitionComplete}
              onReadyForDisplay={() => {
                liveFadeIn();
              }}
