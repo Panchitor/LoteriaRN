@@ -6,22 +6,29 @@ import Image from "next/image";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { getDeviceOperationalState, operationalStateLabel } from "@/lib/deviceStatus";
 import { RemoteControls } from "./RemoteControls";
+import { AVAILABILITY_WINDOWS, calculateDeviceAvailability, calculateRecentOutages, formatAvailabilityDuration, formatAvailabilityPercent } from "@/lib/deviceAvailability";
 
 export const dynamic = "force-dynamic";
 
 export default async function NodeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   
-  const device = await prisma.device.findUnique({
-    where: { id },
-    include: { agency: true }
-  });
+  const historyStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const [device, availabilityPeriods] = await Promise.all([
+    prisma.device.findUnique({ where: { id }, include: { agency: true } }),
+    prisma.deviceAvailabilityPeriod.findMany({
+      where: { device_id: id, ended_at: { gte: historyStart } },
+      orderBy: { ended_at: "desc" },
+    }),
+  ]);
 
   if (!device) return notFound();
 
   const now = Date.now();
   const diffSec = (now - new Date(device.last_seen).getTime()) / 1000;
   const operationalState = getDeviceOperationalState(device, now);
+  const availability = calculateDeviceAvailability(device, availabilityPeriods, now);
+  const recentOutages = calculateRecentOutages(device, availabilityPeriods, now).slice(0, 10);
   const isOnline = operationalState === "online";
   const stateColor = operationalState === "online" ? "text-[#32d74b]" : operationalState === "delayed" ? "text-amber-300" : operationalState === "inactive" ? "text-slate-500" : "text-[#ff453a]";
   let downloadedFiles: string[] = [];
@@ -41,6 +48,41 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ id:
           <ArrowLeft className="h-4 w-4" />
           Volver a Monitoreo
         </Link>
+      </div>
+
+      <div className="mb-8">
+        <h2 className="mb-4 text-sm font-bold uppercase tracking-widest text-muted">Historial de disponibilidad</h2>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {AVAILABILITY_WINDOWS.map(window => {
+            const metric = availability[window.key];
+            return (
+              <div key={window.key} className="rounded border border-[#374151] bg-[#181b1f] p-5 shadow-xl">
+                <p className="text-xs font-bold uppercase tracking-wider text-muted">Últimas {window.label}</p>
+                <p className="mt-2 text-3xl font-black text-[#32d74b]">{formatAvailabilityPercent(metric.percent)}</p>
+                <div className="mt-3 space-y-1 text-xs text-muted">
+                  <p>Online: <span className="text-white">{formatAvailabilityDuration(metric.onlineMs)}</span></p>
+                  <p>Sin conexión: <span className="text-white">{formatAvailabilityDuration(metric.downtimeMs)}</span></p>
+                  <p>Cortes detectados: <span className="text-white">{metric.interruptions}</span></p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <p className="mt-3 text-xs text-muted">El historial se calcula desde que el servidor comenzó a registrar esta información.</p>
+        <div className="mt-5 overflow-x-auto rounded border border-[#374151] bg-[#181b1f]">
+          <table className="w-full min-w-[620px] text-left text-sm">
+            <thead><tr className="border-b border-[#374151] text-xs uppercase tracking-wider text-muted"><th className="p-3">Inicio del corte</th><th>Restablecimiento</th><th>Duración</th></tr></thead>
+            <tbody className="divide-y divide-[#374151]">
+              {recentOutages.length ? recentOutages.map(outage => (
+                <tr key={outage.startedAt.toISOString()}>
+                  <td className="p-3 text-white">{formatDateTime(outage.startedAt)}</td>
+                  <td className={outage.endedAt ? "text-white" : "font-bold text-[#ff453a]"}>{outage.endedAt ? formatDateTime(outage.endedAt) : "En curso"}</td>
+                  <td className="text-muted">{formatAvailabilityDuration(outage.durationMs)}</td>
+                </tr>
+              )) : <tr><td colSpan={3} className="p-5 text-center text-muted">Todavía no se registraron cortes.</td></tr>}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="flex justify-between items-start mb-8">

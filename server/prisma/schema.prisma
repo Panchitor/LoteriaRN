@@ -67,11 +67,27 @@ model Device {
   last_command_at      DateTime?
 
   // Relations
-  logs             DeviceLog[]
-  playback_stats   PlaybackStat[]
-  activation_codes DeviceActivationCode[]
+  logs                        DeviceLog[]
+  playback_stats              PlaybackStat[]
+  activation_codes            DeviceActivationCode[]
+  availability_periods        DeviceAvailabilityPeriod[]
+  availability_started_at     DateTime?
+  availability_tracking_since DateTime?
 
   @@unique([agency_id, tv_number])
+}
+
+model DeviceAvailabilityPeriod {
+  id         String   @id @default(uuid())
+  device_id  String
+  device     Device   @relation(fields: [device_id], references: [id], onDelete: Cascade)
+  started_at DateTime
+  ended_at   DateTime
+  created_at DateTime @default(now())
+
+  @@unique([device_id, started_at, ended_at])
+  @@index([device_id, started_at])
+  @@index([device_id, ended_at])
 }
 
 model DeviceActivationCode {

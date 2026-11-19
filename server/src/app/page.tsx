@@ -6,17 +6,20 @@ import { prisma } from "@/lib/prisma";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import Link from "next/link";
 import { getDeviceOperationalState } from "@/lib/deviceStatus";
+import { calculateAvailabilityByDevice, formatAvailabilityPercent } from "@/lib/deviceAvailability";
 
 export const dynamic = "force-dynamic";
 
 const GB = 1024 * 1024 * 1024;
 
 export default async function DashboardPage() {
-  const [devices, videos, liveEvent, versionConfigs] = await Promise.all([
+  const availabilityHistoryStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const [devices, videos, liveEvent, versionConfigs, availabilityPeriods] = await Promise.all([
     prisma.device.findMany({ include: { agency: true }, orderBy: { last_seen: "desc" } }),
     prisma.video.findMany({ orderBy: { order: "asc" } }),
     prisma.liveEvent.findFirst(),
     prisma.systemConfig.findMany({ where: { key: { in: ["LATEST_APK_VERSION", "PILOT_APK_VERSION"] } } }),
+    prisma.deviceAvailabilityPeriod.findMany({ where: { ended_at: { gte: availabilityHistoryStart } } }),
   ]);
 
   const now = Date.now();
@@ -29,6 +32,7 @@ export default async function DashboardPage() {
     const operationalState = getDeviceOperationalState(device, now);
     return { ...device, ageSeconds, linked, operationalState, isOnline: operationalState === "online" };
   });
+  const availabilityByDevice = calculateAvailabilityByDevice(devices, availabilityPeriods, now);
 
   const linked = terminals.filter(d => d.linked && d.is_active);
   const online = linked.filter(d => d.isOnline);
@@ -132,7 +136,7 @@ export default async function DashboardPage() {
       <Panel title="Actividad de terminales" subtitle="Último contacto y condición operativa" icon={<Tv className="h-5 w-5 text-primary" />}>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-left">
-            <thead><tr className="border-b border-border text-[11px] uppercase tracking-wider text-muted"><th className="py-3">Terminal</th><th>Ubicación</th><th>Reproducción</th><th>Versión</th><th>Espacio</th><th>Último contacto</th><th className="text-right">Estado</th></tr></thead>
+            <thead><tr className="border-b border-border text-[11px] uppercase tracking-wider text-muted"><th className="py-3">Terminal</th><th>Ubicación</th><th>Reproducción</th><th>Versión</th><th>Espacio</th><th>24 h</th><th>7 días</th><th>30 días</th><th>Último contacto</th><th className="text-right">Estado</th></tr></thead>
             <tbody className="divide-y divide-border/60">
               {terminals.slice(0, 8).map(device => (
                 <tr key={device.id} className="text-sm hover:bg-primary/[0.03]">
@@ -141,6 +145,9 @@ export default async function DashboardPage() {
                   <td className="capitalize"><Link href={`/monitoring/${device.id}`} className="text-muted hover:text-white hover:underline">{device.playback_status === "live" ? "Vivo" : ["offline", "playing"].includes(device.playback_status || "") ? "Videos" : device.playback_status === "error" ? "Error" : "Sin datos"}</Link></td>
                   <td><Link href="/updates" className={`${device.app_version === expectedVersion(device) ? "text-primary" : "text-amber-300"} hover:underline`}>{device.app_version || "—"}</Link></td>
                   <td className="text-muted">{device.free_space !== null ? `${(Number(device.free_space) / GB).toFixed(1)} GB` : "—"}</td>
+                  <td className="font-semibold text-primary">{formatAvailabilityPercent(availabilityByDevice.get(device.id)?.day.percent ?? null)}</td>
+                  <td className="text-muted">{formatAvailabilityPercent(availabilityByDevice.get(device.id)?.week.percent ?? null)}</td>
+                  <td className="text-muted">{formatAvailabilityPercent(availabilityByDevice.get(device.id)?.month.percent ?? null)}</td>
                   <td className="text-muted">{formatElapsed(device.ageSeconds)}</td>
                   <td className="text-right"><Link href={`/monitoring/${device.id}`}><StatusBadge state={device.operationalState} /></Link></td>
                 </tr>

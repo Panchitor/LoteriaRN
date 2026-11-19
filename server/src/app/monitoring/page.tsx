@@ -4,16 +4,18 @@ import { revalidatePath } from "next/cache";
 import Link from 'next/link';
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { getDeviceOperationalState, operationalStateLabel } from "@/lib/deviceStatus";
+import { AVAILABILITY_WINDOWS, calculateAvailabilityByDevice, formatAvailabilityPercent } from "@/lib/deviceAvailability";
 
 export const dynamic = "force-dynamic";
 
 export default async function MonitoringPage() {
-  const devices = await prisma.device.findMany({
-    include: { agency: true },
-    orderBy: { last_seen: 'desc' }
-  });
-
   const now = Date.now();
+  const historyStart = new Date(now - 30 * 24 * 60 * 60 * 1000);
+  const [devices, availabilityPeriods] = await Promise.all([
+    prisma.device.findMany({ include: { agency: true }, orderBy: { last_seen: 'desc' } }),
+    prisma.deviceAvailabilityPeriod.findMany({ where: { ended_at: { gte: historyStart } } }),
+  ]);
+  const availabilityByDevice = calculateAvailabilityByDevice(devices, availabilityPeriods, now);
   
   // Calculate analytics
   const processedDevices = devices.map(device => {
@@ -27,6 +29,13 @@ export default async function MonitoringPage() {
   const offlineCount = processedDevices.filter(d => d.operationalState === "offline").length;
   const inactiveCount = processedDevices.filter(d => d.operationalState === "inactive").length;
   const totalCount = processedDevices.filter(d => d.operationalState !== "inactive").length;
+  const trackedDevices = processedDevices.filter(device => device.operationalState !== "inactive" && device.availability_tracking_since);
+  const networkAvailability = Object.fromEntries(AVAILABILITY_WINDOWS.map(window => {
+    const values = trackedDevices
+      .map(device => availabilityByDevice.get(device.id)?.[window.key].percent)
+      .filter((value): value is number => value !== null && value !== undefined);
+    return [window.key, values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length * 10) / 10 : null];
+  })) as Record<(typeof AVAILABILITY_WINDOWS)[number]["key"], number | null>;
 
   return (
     <div className="p-8 pb-20 sm:p-10 font-[family-name:var(--font-geist-sans)] max-w-[1600px] mx-auto w-full">
@@ -49,6 +58,16 @@ export default async function MonitoringPage() {
              Actualizar Ahora
            </button>
         </form>
+      </div>
+
+      <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
+        {AVAILABILITY_WINDOWS.map(window => (
+          <div key={window.key} className="rounded-xl border border-primary/20 bg-primary/[0.05] p-5">
+            <p className="text-xs font-bold uppercase tracking-wider text-muted">Disponibilidad · {window.label}</p>
+            <p className="mt-2 text-3xl font-black text-white">{formatAvailabilityPercent(networkAvailability[window.key])}</p>
+            <p className="mt-1 text-xs text-muted">Promedio de terminales con historial</p>
+          </div>
+        ))}
       </div>
 
       {/* Top Main Grafana-style Widgets */}
@@ -132,6 +151,9 @@ export default async function MonitoringPage() {
                         v{device.app_version}
                       </div>
                     )}
+                  </div>
+                  <div className="mt-1 truncate text-[9px] font-mono opacity-70">
+                    24 h {formatAvailabilityPercent(availabilityByDevice.get(device.id)?.day.percent ?? null)} · 7 d {formatAvailabilityPercent(availabilityByDevice.get(device.id)?.week.percent ?? null)} · 30 d {formatAvailabilityPercent(availabilityByDevice.get(device.id)?.month.percent ?? null)}
                   </div>
                 </div>
               </Link>

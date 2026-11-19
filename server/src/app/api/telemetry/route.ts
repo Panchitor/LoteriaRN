@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { errorMessage } from "@/lib/errors";
 import { authenticateDevice } from "@/lib/deviceAuth";
 import { enforceRateLimit, opaqueRateKey, readJsonBody, requestErrorResponse } from "@/lib/requestGuards";
+import { OFFLINE_AFTER_SECONDS } from "@/lib/deviceStatus";
 
 type TelemetryBody = {
   token?: string;
@@ -38,10 +39,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "DEVICE_REVOKED" }, { status: 401 });
     }
 
-    await prisma.device.update({
+    const heartbeatAt = new Date();
+    const previousLastSeen = authorizedDevice.last_seen;
+    const gapMs = heartbeatAt.getTime() - previousLastSeen.getTime();
+    const sessionWasInterrupted = gapMs >= OFFLINE_AFTER_SECONDS * 1000;
+    const previousSessionStart = authorizedDevice.availability_started_at;
+    const previousSessionEnd = new Date(previousLastSeen.getTime() + OFFLINE_AFTER_SECONDS * 1000);
+
+    const deviceUpdate = prisma.device.update({
       where: { id: authorizedDevice.id },
       data: {
-        last_seen: new Date(),
+        last_seen: heartbeatAt,
+        availability_tracking_since: authorizedDevice.availability_tracking_since || heartbeatAt,
+        availability_started_at: !previousSessionStart || sessionWasInterrupted ? heartbeatAt : previousSessionStart,
         playback_status: playbackStatus || "unknown",
         free_space: freeSpace ? Math.floor(freeSpace) : 0, 
         app_version: appVersion || undefined,
@@ -50,8 +60,24 @@ export async function POST(req: NextRequest) {
         device_model: deviceModel || undefined,
         device_serial: deviceSerial || undefined,
         downloaded_videos: videosStr,
-      }
+      },
     });
+
+    if (sessionWasInterrupted && previousSessionStart && previousSessionEnd > previousSessionStart) {
+      await prisma.$transaction([
+        prisma.deviceAvailabilityPeriod.createMany({
+          data: [{
+            device_id: authorizedDevice.id,
+            started_at: previousSessionStart,
+            ended_at: previousSessionEnd,
+          }],
+          skipDuplicates: true,
+        }),
+        deviceUpdate,
+      ]);
+    } else {
+      await deviceUpdate;
+    }
     // 2. Fetch the Master Live Status
     let liveEvent = await prisma.liveEvent.findFirst();
     if (!liveEvent) {
