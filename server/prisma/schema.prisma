@@ -71,10 +71,27 @@ model Device {
   playback_stats              PlaybackStat[]
   activation_codes            DeviceActivationCode[]
   availability_periods        DeviceAvailabilityPeriod[]
+  app_sessions                DeviceAppSession[]
   availability_started_at     DateTime?
   availability_tracking_since DateTime?
 
   @@unique([agency_id, tv_number])
+}
+
+model DeviceAppSession {
+  id          String    @id @default(uuid())
+  device_id   String
+  device      Device    @relation(fields: [device_id], references: [id], onDelete: Cascade)
+  session_id  String
+  started_at  DateTime  @default(now())
+  last_seen   DateTime  @default(now())
+  ended_at    DateTime?
+  end_reason  String?
+  app_version String?
+
+  @@unique([device_id, session_id])
+  @@index([device_id, started_at])
+  @@index([device_id, ended_at])
 }
 
 model DeviceAvailabilityPeriod {

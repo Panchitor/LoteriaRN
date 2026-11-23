@@ -4,6 +4,7 @@ import { errorMessage } from "@/lib/errors";
 import { authenticateDevice } from "@/lib/deviceAuth";
 import { enforceRateLimit, opaqueRateKey, readJsonBody, requestErrorResponse } from "@/lib/requestGuards";
 import { OFFLINE_AFTER_SECONDS } from "@/lib/deviceStatus";
+import { isRemoteCommandFresh } from "@/lib/remoteCommands";
 
 type TelemetryBody = {
   token?: string;
@@ -15,12 +16,14 @@ type TelemetryBody = {
   androidVersion?: string;
   deviceModel?: string;
   deviceSerial?: string;
+  appSessionId?: string;
 };
 
 export async function POST(req: NextRequest) {
   try {
     const body = await readJsonBody<TelemetryBody>(req, 64 * 1024);
     const { token, playbackStatus, freeSpace, appVersion, hardwareId, downloadedVideos, androidVersion, deviceModel, deviceSerial } = body;
+    const appSessionId = typeof body.appSessionId === "string" && body.appSessionId.length <= 120 ? body.appSessionId : null;
 
     if (!token) {
       return NextResponse.json({ error: "Missing token" }, { status: 400 });
@@ -45,6 +48,7 @@ export async function POST(req: NextRequest) {
     const sessionWasInterrupted = gapMs >= OFFLINE_AFTER_SECONDS * 1000;
     const previousSessionStart = authorizedDevice.availability_started_at;
     const previousSessionEnd = new Date(previousLastSeen.getTime() + OFFLINE_AFTER_SECONDS * 1000);
+    const commandFresh = isRemoteCommandFresh(authorizedDevice, heartbeatAt.getTime());
 
     const deviceUpdate = prisma.device.update({
       where: { id: authorizedDevice.id },
@@ -60,6 +64,9 @@ export async function POST(req: NextRequest) {
         device_model: deviceModel || undefined,
         device_serial: deviceSerial || undefined,
         downloaded_videos: videosStr,
+        screenshot_requested: authorizedDevice.screenshot_requested && !commandFresh ? false : undefined,
+        restart_requested: authorizedDevice.restart_requested && !commandFresh ? false : undefined,
+        last_command_status: (authorizedDevice.screenshot_requested || authorizedDevice.restart_requested) && !commandFresh ? "expired" : undefined,
       },
     });
 
@@ -77,6 +84,23 @@ export async function POST(req: NextRequest) {
       ]);
     } else {
       await deviceUpdate;
+    }
+
+    if (appSessionId) {
+      await prisma.$transaction([
+        prisma.deviceAppSession.updateMany({
+          where: { device_id: authorizedDevice.id, session_id: { not: appSessionId }, ended_at: null },
+          data: { ended_at: heartbeatAt, end_reason: "new_session" },
+        }),
+        prisma.deviceAppSession.createMany({
+          data: [{ device_id: authorizedDevice.id, session_id: appSessionId, started_at: heartbeatAt, last_seen: heartbeatAt, app_version: appVersion || null }],
+          skipDuplicates: true,
+        }),
+        prisma.deviceAppSession.updateMany({
+          where: { device_id: authorizedDevice.id, session_id: appSessionId },
+          data: { last_seen: heartbeatAt, app_version: appVersion || undefined },
+        }),
+      ]);
     }
     // 2. Fetch the Master Live Status
     let liveEvent = await prisma.liveEvent.findFirst();
@@ -125,8 +149,8 @@ export async function POST(req: NextRequest) {
       emergencyMessageColor,
       primaryApiUrl,
       secondaryApiUrl,
-      screenshotRequested: authorizedDevice.screenshot_requested,
-      restartRequested: authorizedDevice.restart_requested,
+      screenshotRequested: authorizedDevice.screenshot_requested && commandFresh && authorizedDevice.last_command === "screenshot",
+      restartRequested: authorizedDevice.restart_requested && commandFresh && authorizedDevice.last_command === "restart",
     });
 
   } catch (error: unknown) {

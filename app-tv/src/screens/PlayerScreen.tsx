@@ -12,6 +12,7 @@ import { MarqueeTicker } from '../components/MarqueeTicker';
 import { localRecoveryAction } from '../utils/localPlaybackRecovery';
 import { fetchReadWithFailover, fetchWithFailover, getApiUrl, getPrimaryApiUrl, saveServerUrls } from '../services/apiClient';
 import { hasLiveProgress } from '../utils/liveProgress';
+import { shouldAttemptLivePlayback } from '../utils/liveActivation';
 import { MAINTENANCE_NOTICE, type ServerSource } from '../utils/failoverPolicy';
 
 const { SilentInstall } = NativeModules;
@@ -130,6 +131,8 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
   const liveLastPositionRef = useRef<number>(0);
   const liveLastPositionTimeRef = useRef<number>(Date.now());
   const liveStatusRef = useRef<LiveStatus>(liveStatus);
+  const liveRetryNotBeforeRef = useRef(0);
+  const appSessionIdRef = useRef(`app-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`);
   const emergencyRef = useRef(emergency);
   
   const currentAppVersion = Constants.expoConfig?.version || '1.0.0';
@@ -504,6 +507,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
         }
 
         let targetUrl = liveStatusRef.current.url || 'https://loteriarn.b-cdn.net/Forquera2/video.m3u8';
+        let liveRequested = liveStatusRef.current.live;
 
         // 1. Telemetry and central control from VPS (if reachable)
         try {
@@ -525,7 +529,8 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
               androidVersion: deviceInfoRef.current.androidVersion,
               deviceModel: deviceInfoRef.current.deviceModel,
               deviceSerial: deviceInfoRef.current.deviceSerial,
-              downloadedVideos: currentDownloadedFiles
+              downloadedVideos: currentDownloadedFiles,
+              appSessionId: appSessionIdRef.current,
             })
           });
           if (resLive.status === 401) {
@@ -541,6 +546,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
           if (dataLive?.url) {
             targetUrl = dataLive.url;
           }
+          liveRequested = dataLive?.live === true;
 
           if (dataLive.pollInterval && dataLive.pollInterval > 0) {
             const newInterval = dataLive.pollInterval * 1000;
@@ -656,6 +662,18 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
 
         // 3. Autonomous Client-Side Stream Verification
         // Each device directly checks if Flussonic stream is broadcasting (HTTP 200)
+        if (!liveRequested) {
+          missedLiveCountRef.current = 0;
+          liveRetryNotBeforeRef.current = 0;
+          setLiveHasError(false);
+          if (liveStatusRef.current.live || liveStatusRef.current.url !== targetUrl) {
+            liveStatusRef.current = { live: false, url: targetUrl };
+            setLiveStatus({ live: false, url: targetUrl });
+          }
+          return;
+        }
+
+        if (!shouldAttemptLivePlayback(liveRequested, liveRetryNotBeforeRef.current)) return;
         const isStreamOnline = await checkStreamUrlDirectly(targetUrl);
         
         if (isMounted) {
@@ -694,10 +712,12 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
   useEffect(() => {
     if (!liveStatus.live || !liveHasError) return;
 
+    const retryDelay = Math.max(1000, liveRetryNotBeforeRef.current - Date.now());
     const timer = setTimeout(() => {
+      liveRetryNotBeforeRef.current = 0;
       setLiveHasError(false);
       setLiveRetryKey(prev => prev + 1);
-    }, 30000);
+    }, retryDelay);
 
     return () => clearTimeout(timer);
   }, [liveStatus.live, liveHasError]);
@@ -798,6 +818,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
       if (hasLiveProgress(liveLastPositionRef.current, status.positionMillis)) {
         liveLastPositionRef.current = status.positionMillis;
         liveLastPositionTimeRef.current = Date.now();
+        liveRetryNotBeforeRef.current = 0;
       }
     } else if (status.error) {
        sendRemoteLog('error', `Live stream error: ${status.error}`);
@@ -1014,6 +1035,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
              }}
              onError={(error) => {
                sendRemoteLog('warn', `Error cargando live stream URL (${liveStatus.url}): ${JSON.stringify(error)}`);
+               liveRetryNotBeforeRef.current = Date.now() + 30000;
                setLiveHasError(true);
                liveFadeOut();
              }}
@@ -1021,6 +1043,7 @@ export default function PlayerScreen({ token, onLogout }: { token: string, onLog
                onLiveVideoStatusUpdate(status);
                if (status.isLoaded) {
                  if ((status as any).error) {
+                   liveRetryNotBeforeRef.current = Date.now() + 30000;
                    setLiveHasError(true);
                    liveFadeOut();
                  } else if (status.isPlaying && status.positionMillis > 0 && !isLiveReady) {

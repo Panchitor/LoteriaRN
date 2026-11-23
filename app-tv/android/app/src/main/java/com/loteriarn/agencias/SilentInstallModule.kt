@@ -78,11 +78,17 @@ class SilentInstallModule(private val reactContext: ReactApplicationContext) : R
             try {
                 val view = activity.window.decorView
                 if (view.width <= 0 || view.height <= 0) throw IllegalStateException("La ventana todavía no tiene dimensiones")
-                val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
-                PixelCopy.request(activity.window, bitmap, { result ->
+                val handler = Handler(Looper.getMainLooper())
+                fun attemptCapture(attempt: Int) {
+                  val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+                  PixelCopy.request(activity.window, bitmap, { result ->
                     if (result != PixelCopy.SUCCESS) {
                         bitmap.recycle()
-                        promise.reject("PIXEL_COPY_FAILED", "PixelCopy devolvió código $result")
+                        if (attempt < 3) {
+                            handler.postDelayed({ attemptCapture(attempt + 1) }, 350L)
+                        } else {
+                            promise.reject("PIXEL_COPY_FAILED", "PixelCopy devolvió código $result después de 3 intentos")
+                        }
                         return@request
                     }
                     try {
@@ -101,7 +107,9 @@ class SilentInstallModule(private val reactContext: ReactApplicationContext) : R
                         bitmap.recycle()
                         promise.reject("SCREENSHOT_ENCODING_ERROR", e.message, e)
                     }
-                }, Handler(Looper.getMainLooper()))
+                  }, handler)
+                }
+                attemptCapture(1)
             } catch (e: Exception) {
                 promise.reject("SCREENSHOT_ERROR", e.message, e)
             }

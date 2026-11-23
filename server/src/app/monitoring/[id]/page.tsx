@@ -7,6 +7,7 @@ import { AutoRefresh } from "@/components/AutoRefresh";
 import { getDeviceOperationalState, operationalStateLabel } from "@/lib/deviceStatus";
 import { RemoteControls } from "./RemoteControls";
 import { AVAILABILITY_WINDOWS, calculateDeviceAvailability, calculateRecentOutages, formatAvailabilityDuration, formatAvailabilityPercent } from "@/lib/deviceAvailability";
+import { isRemoteCommandFresh } from "@/lib/remoteCommands";
 
 export const dynamic = "force-dynamic";
 
@@ -14,12 +15,14 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   
   const historyStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const [device, availabilityPeriods] = await Promise.all([
+  const [device, availabilityPeriods, appSessions, lastStartLog] = await Promise.all([
     prisma.device.findUnique({ where: { id }, include: { agency: true } }),
     prisma.deviceAvailabilityPeriod.findMany({
       where: { device_id: id, ended_at: { gte: historyStart } },
       orderBy: { ended_at: "desc" },
     }),
+    prisma.deviceAppSession.findMany({ where: { device_id: id }, orderBy: { started_at: "desc" }, take: 20 }),
+    prisma.deviceLog.findFirst({ where: { device_id: id, message: { startsWith: "TV iniciado" } }, orderBy: { created_at: "desc" } }),
   ]);
 
   if (!device) return notFound();
@@ -30,6 +33,7 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ id:
   const availability = calculateDeviceAvailability(device, availabilityPeriods, now);
   const recentOutages = calculateRecentOutages(device, availabilityPeriods, now).slice(0, 10);
   const isOnline = operationalState === "online";
+  const commandFresh = isRemoteCommandFresh(device, now);
   const stateColor = operationalState === "online" ? "text-[#32d74b]" : operationalState === "delayed" ? "text-amber-300" : operationalState === "inactive" ? "text-slate-500" : "text-[#ff453a]";
   let downloadedFiles: string[] = [];
   let downloadedFilesInvalid = false;
@@ -48,6 +52,24 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ id:
           <ArrowLeft className="h-4 w-4" />
           Volver a Monitoreo
         </Link>
+      </div>
+
+      <div className="flex justify-between items-start mb-8">
+        <div>
+          <h1 className="text-4xl font-extrabold text-white tracking-tight flex items-center gap-4">
+            <Activity className={stateColor} />
+            Agencia {device.agency.number}
+            {device.agency.name && <span className="text-muted text-2xl font-medium">/ {device.agency.name}</span>}
+          </h1>
+          <p className="text-muted mt-2 font-mono text-sm max-w-xl">Identificador de red: {device.id}</p>
+          <p className={`mt-3 text-sm font-bold ${isOnline ? "text-primary" : "text-danger"}`}>
+            Última señal recibida: {formatDateTime(device.last_seen)} · {formatElapsed(diffSec)}
+          </p>
+        </div>
+        <div className={`px-4 py-2 rounded-sm border flex items-center gap-2 font-bold uppercase tracking-widest ${isOnline ? "bg-[#163620] border-[#32d74b] text-[#32d74b]" : operationalState === "delayed" ? "bg-amber-950/40 border-amber-400 text-amber-300" : operationalState === "inactive" ? "bg-slate-900 border-slate-600 text-slate-500" : "bg-[#3d1616] border-[#ff453a] text-[#ff453a]"}`}>
+          {isOnline ? <CheckCircle className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
+          {operationalStateLabel(operationalState)}
+        </div>
       </div>
 
       <div className="mb-8">
@@ -85,24 +107,6 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ id:
         </div>
       </div>
 
-      <div className="flex justify-between items-start mb-8">
-        <div>
-          <h1 className="text-4xl font-extrabold text-white tracking-tight flex items-center gap-4">
-            <Activity className={stateColor} />
-            Agencia {device.agency.number}
-            {device.agency.name && <span className="text-muted text-2xl font-medium">/ {device.agency.name}</span>}
-          </h1>
-          <p className="text-muted mt-2 font-mono text-sm max-w-xl">
-             Identificador de red: {device.id}
-          </p>
-        </div>
-        
-        <div className={`px-4 py-2 rounded-sm border flex items-center gap-2 font-bold uppercase tracking-widest ${isOnline ? "bg-[#163620] border-[#32d74b] text-[#32d74b]" : operationalState === "delayed" ? "bg-amber-950/40 border-amber-400 text-amber-300" : operationalState === "inactive" ? "bg-slate-900 border-slate-600 text-slate-500" : "bg-[#3d1616] border-[#ff453a] text-[#ff453a]"}`}>
-          {isOnline ? <CheckCircle className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
-          {operationalStateLabel(operationalState)}
-        </div>
-      </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         {/* Connection Widget */}
         <div className="bg-[#181b1f] border border-[#374151] p-6 shadow-xl relative overflow-hidden flex flex-col justify-between">
@@ -112,7 +116,11 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ id:
           <div className="space-y-4">
             <div className="flex justify-between border-b border-[#374151] pb-2">
                <span className="text-muted">Último contacto:</span>
-               <span className="text-white font-mono">{new Date(device.last_seen).toLocaleString()}</span>
+               <span className="text-white font-mono">{formatDateTime(device.last_seen)}</span>
+            </div>
+            <div className="flex justify-between border-b border-[#374151] pb-2">
+               <span className="text-muted">Último inicio registrado:</span>
+               <span className="text-white font-mono">{appSessions[0] ? formatDateTime(appSessions[0].started_at) : lastStartLog ? formatDateTime(lastStartLog.created_at) : "Sin datos"}</span>
             </div>
             <div className="flex justify-between border-b border-[#374151] pb-2">
                <span className="text-muted">Latencia estimada (ping):</span>
@@ -203,6 +211,31 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ id:
         </div>
       </div>
 
+      <div className="mb-8 overflow-hidden rounded border border-[#374151] bg-[#181b1f] shadow-xl">
+        <div className="border-b border-[#374151] p-5">
+          <h2 className="font-bold text-white">Sesiones de la aplicación</h2>
+          <p className="mt-1 text-xs text-muted">Desde la APK 1.0.94 se registra cada apertura, su última notificación y cuándo fue reemplazada por una nueva sesión.</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] text-left text-sm">
+            <thead><tr className="border-b border-[#374151] text-xs uppercase tracking-wider text-muted"><th className="p-3">Inicio</th><th>Última notificación</th><th>Duración informada</th><th>Versión</th><th>Estado</th></tr></thead>
+            <tbody className="divide-y divide-[#374151]">
+              {appSessions.length ? appSessions.map((session, index) => {
+                const reporting = !session.ended_at && now - session.last_seen.getTime() < 180_000;
+                const status = reporting ? "Activa" : session.ended_at ? "Reemplazada por otra sesión" : "Sin señal / posible cierre";
+                return <tr key={session.id}>
+                  <td className="p-3 text-white">{formatDateTime(session.started_at)}</td>
+                  <td className="text-white">{formatDateTime(session.last_seen)}</td>
+                  <td className="text-muted">{formatAvailabilityDuration(session.last_seen.getTime() - session.started_at.getTime())}</td>
+                  <td className="text-muted">{session.app_version || "—"}</td>
+                  <td className={reporting ? "font-bold text-primary" : index === 0 && !session.ended_at ? "font-bold text-danger" : "text-muted"}>{status}</td>
+                </tr>;
+              }) : <tr><td colSpan={5} className="p-5 text-center text-muted">El historial detallado comenzará cuando el equipo instale la APK 1.0.94.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="bg-[#181b1f] border border-[#374151] p-6 shadow-xl lg:col-span-2">
           <h3 className="text-sm font-bold text-muted uppercase tracking-widest mb-4">Última captura remota</h3>
@@ -215,7 +248,7 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ id:
         </div>
         <div className="bg-[#181b1f] border border-[#374151] p-6 shadow-xl">
           <h3 className="text-sm font-bold text-muted uppercase tracking-widest mb-4">Control remoto</h3>
-          <RemoteControls deviceId={device.id} screenshotPending={device.screenshot_requested} restartPending={device.restart_requested} screenshotUnsupported={Boolean(device.last_command_status?.includes("Android 8 o superior"))} />
+          <RemoteControls deviceId={device.id} isOnline={isOnline} screenshotPending={device.screenshot_requested && commandFresh && device.last_command === "screenshot"} restartPending={device.restart_requested && commandFresh && device.last_command === "restart"} screenshotUnsupported={Boolean(device.last_command_status?.includes("Android 8 o superior"))} />
           <div className="mt-6 border-t border-[#374151] pt-4 text-xs text-muted">
             <p>Última orden: <span className="text-white">{device.last_command === "screenshot" ? "Captura" : device.last_command === "restart" ? "Reinicio" : "—"}</span></p>
             <p className="mt-2">Resultado: <span className={device.last_command_status === "success" || device.last_command_status === "accepted" ? "text-primary" : device.last_command_status?.startsWith("error") ? "text-danger" : "text-amber-300"}>{friendlyCommandStatus(device.last_command_status)}</span></p>
@@ -232,8 +265,16 @@ function friendlyCommandStatus(status: string | null) {
   if (status === "success") return "Completada";
   if (status === "accepted") return "Aceptado por el dispositivo";
   if (status === "pending") return "Pendiente";
+  if (status === "expired") return "Vencida: el equipo no respondió";
   if (status.includes("Android 8 o superior")) return "Captura no compatible con este TV Box";
   return status.replace(/^error:\s*/i, "Error: ");
+}
+
+function formatElapsed(seconds: number) {
+  if (seconds < 60) return `hace ${Math.max(0, Math.floor(seconds))} segundos`;
+  if (seconds < 3600) return `hace ${Math.floor(seconds / 60)} minutos`;
+  if (seconds < 86400) return `hace ${Math.floor(seconds / 3600)} horas`;
+  return `hace ${Math.floor(seconds / 86400)} días`;
 }
 
 function formatDateTime(date: Date) {
