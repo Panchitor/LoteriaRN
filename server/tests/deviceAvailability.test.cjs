@@ -80,3 +80,33 @@ test('builds a readable outage history including an ongoing outage', () => {
   assert.equal(outages[0].endedAt, null);
   assert.equal(outages[1].durationMs, 2 * hour);
 });
+
+test('builds a chronological timeline with active, outage and untracked sections', () => {
+  const timeline = availability.buildAvailabilityTimeline({
+    id: 'device-1',
+    last_seen: new Date(now),
+    availability_started_at: new Date(now - 2 * hour),
+    availability_tracking_since: new Date(now - 20 * hour),
+  }, [{
+    device_id: 'device-1',
+    started_at: new Date(now - 20 * hour),
+    ended_at: new Date(now - 6 * hour),
+  }], 24 * hour, now);
+
+  assert.deepEqual(timeline.map(segment => segment.status), ['untracked', 'online', 'offline', 'online']);
+  assert.equal(timeline.reduce((total, segment) => total + segment.durationMs, 0), 24 * hour);
+  assert.equal(timeline[2].durationMs, 4 * hour);
+});
+
+test('shows the entire range as untracked before history collection begins', () => {
+  const timeline = availability.buildAvailabilityTimeline({
+    id: 'device-1',
+    last_seen: new Date(now),
+    availability_started_at: null,
+    availability_tracking_since: null,
+  }, [], 24 * hour, now);
+
+  assert.equal(timeline.length, 1);
+  assert.equal(timeline[0].status, 'untracked');
+  assert.equal(timeline[0].durationMs, 24 * hour);
+});

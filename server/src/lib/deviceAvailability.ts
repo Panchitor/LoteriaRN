@@ -13,10 +13,17 @@ type AvailabilityDevice = {
   availability_tracking_since: Date | null;
 };
 
-type AvailabilityPeriod = {
+export type AvailabilityPeriod = {
   device_id: string;
   started_at: Date;
   ended_at: Date;
+};
+
+export type AvailabilityTimelineSegment = {
+  status: "online" | "offline" | "untracked";
+  startedAt: Date;
+  endedAt: Date;
+  durationMs: number;
 };
 
 export type AvailabilityMetric = {
@@ -116,6 +123,57 @@ export function calculateRecentOutages(
     outages.push({ startedAt: new Date(lastSession.end), endedAt: null, durationMs: now - lastSession.end });
   }
   return outages.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+}
+
+export function buildAvailabilityTimeline(
+  device: AvailabilityDevice,
+  periods: AvailabilityPeriod[],
+  windowMs: number,
+  now = Date.now(),
+): AvailabilityTimelineSegment[] {
+  const windowStart = now - windowMs;
+  const trackingSince = device.availability_tracking_since?.getTime();
+  if (trackingSince === undefined || trackingSince >= now) {
+    return [{ status: "untracked", startedAt: new Date(windowStart), endedAt: new Date(now), durationMs: windowMs }];
+  }
+
+  const observedStart = Math.max(windowStart, trackingSince);
+  const offlineAllowance = OFFLINE_AFTER_SECONDS * 1000;
+  const sessions = periods.map(period => ({
+    start: Math.max(observedStart, period.started_at.getTime()),
+    end: Math.min(now, period.ended_at.getTime()),
+  }));
+  const activeStart = device.availability_started_at?.getTime();
+  if (activeStart !== undefined) {
+    sessions.push({
+      start: Math.max(observedStart, activeStart),
+      end: Math.min(now, device.last_seen.getTime() + offlineAllowance),
+    });
+  }
+
+  const merged = sessions
+    .filter(session => session.end > session.start)
+    .sort((a, b) => a.start - b.start)
+    .reduce<Array<{ start: number; end: number }>>((result, session) => {
+      const previous = result.at(-1);
+      if (previous && session.start <= previous.end) previous.end = Math.max(previous.end, session.end);
+      else result.push({ ...session });
+      return result;
+    }, []);
+
+  const segments: AvailabilityTimelineSegment[] = [];
+  const push = (status: AvailabilityTimelineSegment["status"], start: number, end: number) => {
+    if (end > start) segments.push({ status, startedAt: new Date(start), endedAt: new Date(end), durationMs: end - start });
+  };
+  push("untracked", windowStart, observedStart);
+  let cursor = observedStart;
+  for (const session of merged) {
+    push("offline", cursor, session.start);
+    push("online", session.start, session.end);
+    cursor = Math.max(cursor, session.end);
+  }
+  push("offline", cursor, now);
+  return segments;
 }
 
 export function formatAvailabilityPercent(percent: number | null) {

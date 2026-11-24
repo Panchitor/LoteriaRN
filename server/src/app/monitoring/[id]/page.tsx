@@ -6,7 +6,7 @@ import Image from "next/image";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { getDeviceOperationalState, operationalStateLabel } from "@/lib/deviceStatus";
 import { RemoteControls } from "./RemoteControls";
-import { AVAILABILITY_WINDOWS, calculateDeviceAvailability, calculateRecentOutages, formatAvailabilityDuration, formatAvailabilityPercent } from "@/lib/deviceAvailability";
+import { AVAILABILITY_WINDOWS, buildAvailabilityTimeline, calculateDeviceAvailability, calculateRecentOutages, formatAvailabilityDuration, formatAvailabilityPercent, type AvailabilityTimelineSegment } from "@/lib/deviceAvailability";
 import { isRemoteCommandFresh } from "@/lib/remoteCommands";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +32,7 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ id:
   const operationalState = getDeviceOperationalState(device, now);
   const availability = calculateDeviceAvailability(device, availabilityPeriods, now);
   const recentOutages = calculateRecentOutages(device, availabilityPeriods, now).slice(0, 10);
+  const timelines = Object.fromEntries(AVAILABILITY_WINDOWS.map(window => [window.key, buildAvailabilityTimeline(device, availabilityPeriods, window.milliseconds, now)]));
   const isOnline = operationalState === "online";
   const commandFresh = isRemoteCommandFresh(device, now);
   const stateColor = operationalState === "online" ? "text-[#32d74b]" : operationalState === "delayed" ? "text-amber-300" : operationalState === "inactive" ? "text-slate-500" : "text-[#ff453a]";
@@ -91,6 +92,22 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ id:
           })}
         </div>
         <p className="mt-3 text-xs text-muted">El historial se calcula desde que el servidor comenzó a registrar esta información.</p>
+        <div className="mt-5 rounded border border-[#374151] bg-[#181b1f] p-5 shadow-xl">
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="font-bold text-white">Línea de tiempo</h3>
+              <p className="mt-1 text-xs text-muted">Cada tramo muestra cuándo el equipo informó normalmente y cuándo perdió conexión.</p>
+            </div>
+            <div className="flex flex-wrap gap-4 text-xs text-muted">
+              <span className="flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-sm bg-[#32d74b]" /> Activo</span>
+              <span className="flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-sm bg-[#ff453a]" /> Caído</span>
+              <span className="flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-sm bg-slate-600" /> Sin historial</span>
+            </div>
+          </div>
+          <div className="space-y-5">
+            {AVAILABILITY_WINDOWS.map(window => <AvailabilityTimeline key={window.key} label={window.label} windowMs={window.milliseconds} segments={timelines[window.key] || []} now={now} />)}
+          </div>
+        </div>
         <div className="mt-5 overflow-x-auto rounded border border-[#374151] bg-[#181b1f]">
           <table className="w-full min-w-[620px] text-left text-sm">
             <thead><tr className="border-b border-[#374151] text-xs uppercase tracking-wider text-muted"><th className="p-3">Inicio del corte</th><th>Restablecimiento</th><th>Duración</th></tr></thead>
@@ -260,6 +277,25 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ id:
   );
 }
 
+function AvailabilityTimeline({ label, windowMs, segments, now }: { label: string; windowMs: number; segments: AvailabilityTimelineSegment[]; now: number }) {
+  const colors = { online: "bg-[#32d74b]", offline: "bg-[#ff453a]", untracked: "bg-slate-600" } as const;
+  const descriptions = { online: "Activo", offline: "Caído", untracked: "Sin historial" } as const;
+  return <div>
+    <div className="mb-2 flex items-end justify-between gap-4">
+      <span className="text-xs font-bold uppercase tracking-wider text-white">{label}</span>
+      <span className="text-[11px] text-muted">{formatShortDate(new Date(now - windowMs))} → Ahora</span>
+    </div>
+    <div className="flex h-8 w-full overflow-hidden rounded border border-[#374151] bg-black" aria-label={`Disponibilidad de las últimas ${label}`}>
+      {segments.map((segment, index) => {
+        const width = Math.max(0.08, (segment.durationMs / windowMs) * 100);
+        const title = `${descriptions[segment.status]}: ${formatDateTime(segment.startedAt)} a ${formatDateTime(segment.endedAt)} (${formatAvailabilityDuration(segment.durationMs)})`;
+        return <span key={`${segment.status}-${segment.startedAt.getTime()}-${index}`} className={`${colors[segment.status]} h-full border-r border-black/20 transition-opacity hover:opacity-75`} style={{ width: `${width}%` }} title={title} />;
+      })}
+    </div>
+    <div className="mt-1 flex justify-between text-[10px] text-muted"><span>Inicio</span><span>Ahora</span></div>
+  </div>;
+}
+
 function friendlyCommandStatus(status: string | null) {
   if (!status) return "—";
   if (status === "success") return "Completada";
@@ -279,4 +315,8 @@ function formatElapsed(seconds: number) {
 
 function formatDateTime(date: Date) {
   return new Intl.DateTimeFormat("es-AR", { timeZone: "America/Argentina/Buenos_Aires", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(date);
+}
+
+function formatShortDate(date: Date) {
+  return new Intl.DateTimeFormat("es-AR", { timeZone: "America/Argentina/Buenos_Aires", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(date);
 }
