@@ -19,3 +19,11 @@ test('admin configuration can independently toggle editor sections', () => {
     { key: 'EDITOR_SHOW_SCHEDULE', value: 'true' },
   ]), { agencies: false, schedule: true });
 });
+
+test('editors can upload playlist media while APK publishing remains admin-only', () => {
+  const proxy = fs.readFileSync(path.join(__dirname, '../src/proxy.ts'), 'utf8');
+  const mediaRoute = fs.readFileSync(path.join(__dirname, '../src/app/api/admin/videos/route.ts'), 'utf8');
+  assert.match(proxy, /\/api\/admin\/updates/);
+  assert.doesNotMatch(proxy, /['"]\/api\/admin['"]/);
+  assert.match(mediaRoute, /\["ADMIN", "EDITOR"\]/);
+});

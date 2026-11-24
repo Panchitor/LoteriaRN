@@ -30,18 +30,25 @@ export async function proxy(request: NextRequest) {
   }
 
   if (!token) {
+    if (pathname.startsWith('/api/')) return NextResponse.json({ error: 'Sesión vencida. Volvé a iniciar sesión.' }, { status: 401 })
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
   const user = await verifyToken(token)
   if (!user) {
+    if (pathname.startsWith('/api/')) {
+      const response = NextResponse.json({ error: 'Sesión vencida. Volvé a iniciar sesión.' }, { status: 401 })
+      response.cookies.delete('auth_session')
+      return response
+    }
     const response = NextResponse.redirect(new URL('/login', request.url))
     response.cookies.delete('auth_session')
     return response
   }
 
-  const adminRoutes = ['/users', '/settings', '/live', '/emergency', '/groups', '/api/admin']
+  const adminRoutes = ['/users', '/settings', '/live', '/emergency', '/groups', '/api/admin/updates']
   if (user.role !== 'ADMIN' && adminRoutes.some(route => pathname.startsWith(route))) {
+    if (pathname.startsWith('/api/')) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
     return NextResponse.redirect(new URL('/', request.url))
   }
 

@@ -282,6 +282,7 @@ export function ReorderableTable({ videos }: { videos: SortableVideo[] }) {
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [preview, setPreview] = useState<SortableVideo | null>(null);
 
 
   const handleDragStart = (idx: number) => {
@@ -383,15 +384,14 @@ export function ReorderableTable({ videos }: { videos: SortableVideo[] }) {
                   {new Date(video.created_at).toLocaleDateString('es-AR')}
                 </td>
                 <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
-                  <a
-                    href={`/api/videos/${video.filename}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => setPreview(video)}
                     className="p-2 text-muted hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
-                    title="Reproducir/Ver"
+                    title="Ver contenido"
                   >
                     <Play className="h-5 w-5" />
-                  </a>
+                  </button>
                   <DeleteVideoButton id={video.id} />
                 </td>
               </tr>
@@ -399,6 +399,28 @@ export function ReorderableTable({ videos }: { videos: SortableVideo[] }) {
           )}
         </tbody>
       </table>
+      {preview && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={() => setPreview(null)}>
+          <div className="relative w-full max-w-5xl overflow-hidden rounded-2xl border border-border bg-background shadow-2xl" onClick={event => event.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-border px-5 py-4">
+              <div className="min-w-0">
+                <h3 className="truncate font-bold text-white">{preview.original_name}</h3>
+                <p className="mt-1 text-xs text-muted">Vista previa dentro del panel</p>
+              </div>
+              <button type="button" onClick={() => setPreview(null)} className="ml-4 rounded-lg p-2 text-muted hover:bg-surface-hover hover:text-white" aria-label="Cerrar vista previa">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="flex min-h-[280px] max-h-[75vh] items-center justify-center bg-black p-3">
+              {preview.media_type === 'image' ? (
+                <Image src={`/api/videos/${preview.filename}`} alt={preview.original_name} width={1280} height={720} unoptimized className="max-h-[70vh] w-auto max-w-full object-contain" />
+              ) : (
+                <video key={preview.id} src={`/api/videos/${preview.filename}`} controls autoPlay className="max-h-[70vh] w-full bg-black" />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

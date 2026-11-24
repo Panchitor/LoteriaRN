@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   try {
     const session = req.cookies.get("auth_session")?.value;
     const user = session ? await verifyToken(session) : null;
-    if (user?.role !== "ADMIN") return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+    if (!user || !["ADMIN", "EDITOR"].includes(user.role)) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
 
     const formData = await req.formData();
     const file = formData.get("file") as File;
